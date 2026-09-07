@@ -56,6 +56,32 @@ does not generate speculative boxes.
 Omit `--include` to prepare every page. The generated `manifest.json` lists
 the source PDF and page number for each page sent to annotation.
 
+## Import CVAT Labels
+
+CVAT Online may limit exports that include images. Export annotations in YOLO
+format without images, retain the original PDF, then create local review
+overlays and crops by pairing each ZIP with its source PDF:
+
+```powershell
+.\.venv\Scripts\python.exe main.py import-cvat --archive input/cvat_gulf_page_12.zip --source input/gulftoday_2026-09-01.pdf --archive input/cvat_alfajr_pages.zip --source input/alfajr_2026-09-01.pdf
+```
+
+The command expects one `--source` for every `--archive`, in the same order.
+It verifies the sole class is `legal_notice`, maps `page_0012.txt` to PDF page
+12, renders the source pages, and saves numbered overlays, notice crops, and
+an `import_report.json` under `output/cvat_import/`.
+
+After approving the overlays, create splits by assigning whole source issues to
+training and leaving other issues for validation:
+
+```powershell
+.\.venv\Scripts\python.exe main.py prepare-dataset --report output/cvat_import/initial_cvat_review/import_report.json --train-source input/alfajr_2026-09-01.pdf
+```
+
+The command refuses to overwrite existing dataset files and validates the
+result. It reconstructs labels from the reviewed pixel boxes, so use it only
+after annotation approval.
+
 ## Label Training Data
 
 Use an annotation tool that can export **YOLO detection** labels, such as

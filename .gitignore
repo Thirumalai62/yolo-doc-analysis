@@ -3,20 +3,25 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.cache
 
 # Local input, datasets, downloaded weights, and generated artifacts
 /input/*
 !/input/.gitkeep
 /models/*
 !/models/.gitkeep
-/dataset/images/*
-!/dataset/images/
-!/dataset/images/**/
-!/dataset/images/**/.gitkeep
-/dataset/labels/*
-!/dataset/labels/
-!/dataset/labels/**/
-!/dataset/labels/**/.gitkeep
+/dataset/images/train/*
+!/dataset/images/train/.gitkeep
+/dataset/images/val/*
+!/dataset/images/val/.gitkeep
+/dataset/images/test/*
+!/dataset/images/test/.gitkeep
+/dataset/labels/train/*
+!/dataset/labels/train/.gitkeep
+/dataset/labels/val/*
+!/dataset/labels/val/.gitkeep
+/dataset/labels/test/*
+!/dataset/labels/test/.gitkeep
 /output/*
 !/output/.gitkeep
 /expected-output/*

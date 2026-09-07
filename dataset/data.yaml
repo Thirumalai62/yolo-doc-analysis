@@ -1,5 +1,4 @@
 # One class is used for Arabic, English, and bilingual legal notices.
-path: .
 train: images/train
 val: images/val
 test: images/test

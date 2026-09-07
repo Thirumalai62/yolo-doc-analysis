@@ -10,8 +10,10 @@ import argparse
 from datetime import datetime
 import json
 import math
+import shutil
 import subprocess
 import sys
+from zipfile import ZipFile
 from pathlib import Path
 from typing import Iterator
 
@@ -326,6 +328,182 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
     print(f"Review manifest: {manifest_path.relative_to(PROJECT_ROOT)}")
 
 
+def parse_yolo_labels(label_path: str, content: str) -> list[tuple[float, float, float, float]]:
+    """Read one-class YOLO labels and reject invalid rectangles before rendering crops."""
+    boxes: list[tuple[float, float, float, float]] = []
+    for line_number, line in enumerate(content.splitlines(), start=1):
+        values = line.split()
+        if len(values) != 5:
+            raise SystemExit(f"{label_path}:{line_number} needs 5 values")
+        try:
+            class_id = int(values[0])
+            x_center, y_center, width, height = (float(value) for value in values[1:])
+        except ValueError as error:
+            raise SystemExit(f"{label_path}:{line_number} contains non-numeric values") from error
+        coordinates = (x_center, y_center, width, height)
+        if class_id != 0 or not all(math.isfinite(value) for value in coordinates):
+            raise SystemExit(f"{label_path}:{line_number} must use class 0 and finite coordinates")
+        if width <= 0 or height <= 0 or x_center - width / 2 < 0 or x_center + width / 2 > 1 or y_center - height / 2 < 0 or y_center + height / 2 > 1:
+            raise SystemExit(f"{label_path}:{line_number} has an empty or out-of-bounds box")
+        boxes.append(coordinates)
+    return boxes
+
+
+def save_annotation_review(image_path: Path, boxes: list[tuple[float, float, float, float]], destination: Path) -> list[dict[str, object]]:
+    """Save a numbered overlay and complete-notice crops for manual annotation QA."""
+    from PIL import Image, ImageDraw
+
+    image = Image.open(image_path).convert("RGB")
+    overlay = image.copy()
+    draw = ImageDraw.Draw(overlay)
+    crop_dir = destination / "crops"
+    crop_dir.mkdir(parents=True, exist_ok=True)
+    notices: list[dict[str, object]] = []
+    for number, (x_center, y_center, width, height) in enumerate(boxes, start=1):
+        x1 = round((x_center - width / 2) * image.width)
+        y1 = round((y_center - height / 2) * image.height)
+        x2 = round((x_center + width / 2) * image.width)
+        y2 = round((y_center + height / 2) * image.height)
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(image.width, x2), min(image.height, y2)
+        draw.rectangle((x1, y1, x2, y2), outline="red", width=max(3, image.width // 500))
+        draw.text((x1 + 4, y1 + 4), str(number), fill="red", stroke_width=1, stroke_fill="white")
+        crop_path = crop_dir / f"notice_{number:03d}.png"
+        image.crop((x1, y1, x2, y2)).save(crop_path)
+        notices.append({
+            "id": number,
+            "bbox_xyxy": [x1, y1, x2, y2],
+            "crop": str(crop_path.relative_to(PROJECT_ROOT)),
+        })
+    destination.mkdir(parents=True, exist_ok=True)
+    overlay.save(destination / "annotated.png")
+    return notices
+
+
+def run_import_cvat(args: argparse.Namespace) -> None:
+    """Match annotation-only CVAT exports to PDFs and create visual QA artifacts."""
+    if len(args.archive) != len(args.source):
+        raise SystemExit("Use the same number of --archive and --source arguments, in matching order.")
+    ensure_directories()
+    output_root = create_run_directory("cvat_import", args.name)
+    report: list[dict[str, object]] = []
+    seen_pages: set[tuple[Path, int]] = set()
+
+    for archive_value, source_value in zip(args.archive, args.source):
+        archive_path = project_path(archive_value)
+        source_path = project_path(source_value)
+        if not archive_path.is_file():
+            raise SystemExit(f"CVAT archive does not exist: {archive_path}")
+        if not source_path.is_file() or source_path.suffix.lower() != ".pdf":
+            raise SystemExit(f"Source must be an existing PDF: {source_path}")
+        with ZipFile(archive_path) as archive:
+            try:
+                names = archive.read("obj.names").decode("utf-8").splitlines()
+            except KeyError as error:
+                raise SystemExit(f"{archive_path} is not a supported CVAT YOLO export (missing obj.names).") from error
+            if names != [LEGAL_NOTICE_CLASS]:
+                raise SystemExit(f"{archive_path} must contain only the '{LEGAL_NOTICE_CLASS}' class.")
+            label_entries = sorted(entry for entry in archive.namelist() if entry.startswith("obj_train_data/") and entry.endswith(".txt"))
+            if not label_entries:
+                raise SystemExit(f"{archive_path} contains no YOLO label files.")
+            page_numbers: dict[str, int] = {}
+            for entry in label_entries:
+                stem = Path(entry).stem
+                if not stem.startswith("page_") or not stem[5:].isdigit():
+                    raise SystemExit(f"Cannot map CVAT label to a PDF page: {entry}")
+                page_numbers[entry] = int(stem[5:])
+            duplicate_pages = [(source_path, page) for page in page_numbers.values() if (source_path, page) in seen_pages]
+            if duplicate_pages:
+                raise SystemExit(f"Duplicate source-page mapping: {duplicate_pages[0][0].name} page {duplicate_pages[0][1]}")
+            rendered_root = output_root / "pages" / source_path.stem
+            rendered = render_pdf(source_path, rendered_root, args.dpi, set(page_numbers.values()))
+            rendered_by_page = {int(path.stem.removeprefix("page_")): path for path in rendered}
+            for entry in label_entries:
+                page_number = page_numbers[entry]
+                image_path = rendered_by_page.get(page_number)
+                if image_path is None:
+                    raise SystemExit(f"{source_path.name} does not contain PDF page {page_number}.")
+                boxes = parse_yolo_labels(f"{archive_path.name}:{entry}", archive.read(entry).decode("utf-8"))
+                page_root = output_root / "review" / source_path.stem / image_path.stem
+                notices = save_annotation_review(image_path, boxes, page_root)
+                report.append({
+                    "cvat_archive": archive_path.name,
+                    "source_pdf": str(source_path.relative_to(PROJECT_ROOT)),
+                    "pdf_page": page_number,
+                    "image": str(image_path.relative_to(PROJECT_ROOT)),
+                    "annotated_image": str((page_root / "annotated.png").relative_to(PROJECT_ROOT)),
+                    "notice_count": len(notices),
+                    "notices": notices,
+                })
+                seen_pages.add((source_path, page_number))
+
+    report_path = output_root / "import_report.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(f"Imported {len(report)} annotated page(s) and {sum(page['notice_count'] for page in report)} notice box(es).")
+    print(f"Review report: {report_path.relative_to(PROJECT_ROOT)}")
+
+
+def run_prepare_dataset(args: argparse.Namespace) -> None:
+    """Promote approved review pages into issue-separated YOLO train/validation splits."""
+    report_path = project_path(args.report)
+    if not report_path.is_file():
+        raise SystemExit(f"Import report does not exist: {report_path}")
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"Invalid import report: {report_path}") from error
+    if not isinstance(report, list) or not report:
+        raise SystemExit(f"Import report contains no annotated pages: {report_path}")
+
+    train_sources = {str(project_path(source).relative_to(PROJECT_ROOT)) for source in args.train_source}
+    available_sources = {page.get("source_pdf") for page in report}
+    unknown_sources = train_sources - available_sources
+    if unknown_sources:
+        raise SystemExit(f"--train-source is not present in the report: {sorted(unknown_sources)[0]}")
+    if len(available_sources) - len(train_sources) == 0:
+        raise SystemExit("At least one distinct source PDF must remain for validation.")
+
+    staged: list[tuple[dict, str, Path, Path]] = []
+    for page in report:
+        source_pdf = page.get("source_pdf")
+        image_value = page.get("image")
+        notices = page.get("notices")
+        page_number = page.get("pdf_page")
+        if not isinstance(source_pdf, str) or not isinstance(image_value, str) or not isinstance(notices, list) or not isinstance(page_number, int):
+            raise SystemExit("Import report has an invalid page entry.")
+        split = "train" if source_pdf in train_sources else "val"
+        image_path = project_path(image_value)
+        if not image_path.is_file():
+            raise SystemExit(f"Imported source image is missing: {image_path}")
+        image_name = f"{Path(source_pdf).stem}_page_{page_number:04d}.png"
+        destination_image = DATASET_DIR / "images" / split / image_name
+        destination_label = DATASET_DIR / "labels" / split / image_name.replace(".png", ".txt")
+        if destination_image.exists() or destination_label.exists():
+            raise SystemExit(f"Dataset destination already exists: {destination_image}. Do not overwrite labeled data.")
+        staged.append((page, split, destination_image, destination_label))
+
+    for page, split, destination_image, destination_label in staged:
+        from PIL import Image
+
+        destination_image.parent.mkdir(parents=True, exist_ok=True)
+        destination_label.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(project_path(page["image"]), destination_image)
+        with Image.open(destination_image) as image:
+            lines = []
+            for notice in page["notices"]:
+                x1, y1, x2, y2 = notice["bbox_xyxy"]
+                x_center = (x1 + x2) / 2 / image.width
+                y_center = (y1 + y2) / 2 / image.height
+                width = (x2 - x1) / image.width
+                height = (y2 - y1) / image.height
+                lines.append(f"0 {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
+        destination_label.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print(f"Added {split}: {destination_image.relative_to(PROJECT_ROOT)} ({len(page['notices'])} notices)")
+
+    validate_dataset(DATASET_DIR / "data.yaml")
+    print("Dataset preparation complete. These splits are for a pipeline check, not production evaluation.")
+
+
 def read_dataset_config(data_path: Path) -> dict:
     require_packages("yaml")
     import yaml
@@ -467,6 +645,18 @@ def create_parser() -> argparse.ArgumentParser:
     prepare.add_argument("--include", action="append", help="Repeat FILE.pdf:PAGE,PAGE to select pages; default: all pages")
     prepare.add_argument("--name", help="Optional unique output run name")
     prepare.set_defaults(func=run_prepare_annotation)
+
+    cvat_import = commands.add_parser("import-cvat", help="Import annotation-only CVAT YOLO exports and generate review overlays")
+    cvat_import.add_argument("--archive", action="append", required=True, help="CVAT YOLO ZIP; repeat in the same order as --source")
+    cvat_import.add_argument("--source", action="append", required=True, help="Source PDF; repeat in the same order as --archive")
+    cvat_import.add_argument("--dpi", type=int, default=200)
+    cvat_import.add_argument("--name", help="Optional unique output run name")
+    cvat_import.set_defaults(func=run_import_cvat)
+
+    prepare_dataset = commands.add_parser("prepare-dataset", help="Copy approved CVAT review pages into issue-separated YOLO splits")
+    prepare_dataset.add_argument("--report", required=True, help="import_report.json from import-cvat")
+    prepare_dataset.add_argument("--train-source", action="append", required=True, help="Source PDF assigned to train; repeat as needed")
+    prepare_dataset.set_defaults(func=run_prepare_dataset)
 
     validate = commands.add_parser("validate-dataset", help="Validate YOLO labels before training")
     validate.add_argument("--data", default="dataset/data.yaml")
