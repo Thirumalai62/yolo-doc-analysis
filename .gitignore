@@ -1,0 +1,25 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local input, datasets, downloaded weights, and generated artifacts
+/input/*
+!/input/.gitkeep
+/models/*
+!/models/.gitkeep
+/dataset/images/*
+!/dataset/images/**/.gitkeep
+/dataset/labels/*
+!/dataset/labels/**/.gitkeep
+/output/*
+!/output/.gitkeep
+/runs/*
+!/runs/.gitkeep
+
+# Tool and operating-system files
+.huggingface/
+.DS_Store
+Thumbs.db
+.env
