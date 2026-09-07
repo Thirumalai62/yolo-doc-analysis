@@ -7,7 +7,9 @@ Run `py main.py --help` to see the available commands. Start with
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
+import math
 import subprocess
 import sys
 from pathlib import Path
@@ -107,7 +109,7 @@ def input_files(input_path: Path, extensions: set[str]) -> list[Path]:
     return sorted(files)
 
 
-def render_pdf(pdf_path: Path, destination: Path, dpi: int) -> list[Path]:
+def render_pdf(pdf_path: Path, destination: Path, dpi: int, page_numbers: set[int] | None = None) -> list[Path]:
     """Render each PDF page with pypdfium2; no external PDF utility is needed."""
     from PIL import Image
     import pypdfium2 as pdfium
@@ -118,6 +120,8 @@ def render_pdf(pdf_path: Path, destination: Path, dpi: int) -> list[Path]:
     destination.mkdir(parents=True, exist_ok=True)
     try:
         for page_number in range(len(document)):
+            if page_numbers is not None and page_number + 1 not in page_numbers:
+                continue
             page = document[page_number]
             bitmap = page.render(scale=scale)
             pil_image = bitmap.to_pil().convert("RGB")
@@ -129,21 +133,37 @@ def render_pdf(pdf_path: Path, destination: Path, dpi: int) -> list[Path]:
     return rendered_paths
 
 
-def render_input_pdfs(input_path: Path, dpi: int) -> list[Path]:
+def render_input_pdfs(
+    input_path: Path, dpi: int, destination_root: Path, selections: dict[str, set[int]] | None = None
+) -> list[Path]:
     pages: list[Path] = []
     for pdf_path in input_files(input_path, {".pdf"}):
+        page_numbers = selections.get(pdf_path.name) if selections else None
+        if selections and page_numbers is None:
+            continue
         relative_name = pdf_path.relative_to(input_path) if input_path.is_dir() else Path(pdf_path.name)
-        destination = OUTPUT_DIR / "rendered" / relative_name.with_suffix("")
-        rendered = render_pdf(pdf_path, destination, dpi)
+        destination = destination_root / relative_name.with_suffix("")
+        rendered = render_pdf(pdf_path, destination, dpi, page_numbers)
         print(f"Rendered {len(rendered)} page(s): {pdf_path.name}")
         pages.extend(rendered)
     return pages
 
 
+def create_run_directory(kind: str, name: str | None = None) -> Path:
+    """Keep generated artifacts from separate commands from overwriting each other."""
+    run_name = name or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    destination = OUTPUT_DIR / kind / run_name
+    if destination.exists():
+        raise SystemExit(f"Output run already exists: {destination}. Choose a different --name.")
+    destination.mkdir(parents=True)
+    return destination
+
+
 def run_render(args: argparse.Namespace) -> None:
     ensure_directories()
-    pages = render_input_pdfs(project_path(args.input), args.dpi)
-    print(f"Saved {len(pages)} rendered page(s) under output/rendered/.")
+    output_root = create_run_directory("rendered", args.name)
+    pages = render_input_pdfs(project_path(args.input), args.dpi, output_root)
+    print(f"Saved {len(pages)} rendered page(s): {output_root.relative_to(PROJECT_ROOT)}")
 
 
 def download_layout_model(_: argparse.Namespace) -> None:
@@ -182,17 +202,20 @@ def layout_model_path() -> Path:
 def run_preview_layout(args: argparse.Namespace) -> None:
     """Annotate general page-layout regions using the downloaded medium model."""
     ensure_directories()
-    pages = render_input_pdfs(project_path(args.input), args.dpi)
+    output_root = create_run_directory("layout_preview", args.name)
+    rendered_root = output_root / "rendered"
+    pages = render_input_pdfs(project_path(args.input), args.dpi, rendered_root)
     model = load_yolo(layout_model_path())
-    preview_dir = OUTPUT_DIR / "layout_preview"
+    preview_dir = output_root / "annotated"
     for page in pages:
-        relative_page = page.relative_to(OUTPUT_DIR / "rendered")
+        relative_page = page.relative_to(rendered_root)
         destination = preview_dir / relative_page
         destination.parent.mkdir(parents=True, exist_ok=True)
         result = model.predict(str(page), imgsz=args.image_size, conf=args.confidence, device="cpu", verbose=False)[0]
         result.save(filename=str(destination))
         print(f"Layout preview saved: {destination.relative_to(PROJECT_ROOT)}")
-    print("Preview complete. These boxes are layout classes, not legal-notice predictions.")
+    print(f"Preview complete: {output_root.relative_to(PROJECT_ROOT)}")
+    print("These boxes are layout classes, not legal-notice predictions.")
 
 
 def class_names(model) -> list[str]:
@@ -214,15 +237,16 @@ def run_detect(args: argparse.Namespace) -> None:
     from PIL import Image
 
     ensure_directories()
-    pages = render_input_pdfs(project_path(args.input), args.dpi)
+    output_root = create_run_directory("legal_notices", args.name)
+    rendered_root = output_root / "rendered"
+    pages = render_input_pdfs(project_path(args.input), args.dpi, rendered_root)
     model = load_yolo(project_path(args.weights))
     require_legal_notice_model(model)
-    output_root = OUTPUT_DIR / "legal_notices"
     report: list[dict] = []
 
     for page in pages:
-        relative_page = page.relative_to(OUTPUT_DIR / "rendered")
-        page_root = output_root / relative_page.parent / relative_page.stem
+        relative_page = page.relative_to(rendered_root)
+        page_root = output_root / "pages" / relative_page.parent / relative_page.stem
         crop_dir = page_root / "crops"
         crop_dir.mkdir(parents=True, exist_ok=True)
         result = model.predict(str(page), imgsz=args.image_size, conf=args.confidence, device="cpu", verbose=False)[0]
@@ -232,6 +256,10 @@ def run_detect(args: argparse.Namespace) -> None:
         detections: list[dict] = []
         for number, box in enumerate(result.boxes, start=1):
             x1, y1, x2, y2 = (round(value) for value in box.xyxy[0].tolist())
+            x1, x2 = max(0, x1), min(image.width, x2)
+            y1, y2 = max(0, y1), min(image.height, y2)
+            if x2 <= x1 or y2 <= y1:
+                continue
             crop_path = crop_dir / f"notice_{number:03d}.png"
             image.crop((x1, y1, x2, y2)).save(crop_path)
             detections.append({
@@ -251,6 +279,53 @@ def run_detect(args: argparse.Namespace) -> None:
     print(f"Saved report: {report_path.relative_to(PROJECT_ROOT)}")
 
 
+def parse_page_selection(values: list[str] | None) -> dict[str, set[int]]:
+    """Parse repeated FILE.pdf:PAGE,PAGE options for annotation review."""
+    selections: dict[str, set[int]] = {}
+    for value in values or []:
+        try:
+            filename, page_numbers = value.rsplit(":", 1)
+            numbers = {int(number) for number in page_numbers.split(",")}
+        except ValueError as error:
+            raise SystemExit(f"Invalid --include value: {value}. Use FILE.pdf:PAGE,PAGE.") from error
+        if not filename or not numbers or any(number <= 0 for number in numbers):
+            raise SystemExit(f"Invalid --include value: {value}. Page numbers must be positive.")
+        selections.setdefault(Path(filename).name, set()).update(numbers)
+    return selections
+
+
+def run_prepare_annotation(args: argparse.Namespace) -> None:
+    """Render selected pages and record them for manual whole-notice annotation."""
+    ensure_directories()
+    output_root = create_run_directory("annotation_review", args.name)
+    rendered_root = output_root / "pages"
+    selections = parse_page_selection(args.include)
+    pages = render_input_pdfs(project_path(args.input), args.dpi, rendered_root, selections or None)
+    selected: list[dict[str, object]] = []
+    for page in pages:
+        source_pdf = page.parent.name + ".pdf"
+        page_number = int(page.stem.removeprefix("page_"))
+        if selections and page_number not in selections.get(source_pdf, set()):
+            continue
+        selected.append({
+            "source_pdf": source_pdf,
+            "pdf_page": page_number,
+            "image": str(page.relative_to(PROJECT_ROOT)),
+            "status": "needs_manual_annotation",
+        })
+    if selections and not selected:
+        raise SystemExit("No rendered pages matched --include. Check the PDF filenames and page numbers.")
+    manifest = {
+        "class_name": LEGAL_NOTICE_CLASS,
+        "instructions": "Draw one tight rectangle around each complete published legal notice. Include attached authority/header, logo, body, border, and notice-specific footer. Exclude advertisements, editorial content, and page-level newspaper furniture.",
+        "pages": selected,
+    }
+    manifest_path = output_root / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(f"Prepared {len(selected)} page(s): {output_root.relative_to(PROJECT_ROOT)}")
+    print(f"Review manifest: {manifest_path.relative_to(PROJECT_ROOT)}")
+
+
 def read_dataset_config(data_path: Path) -> dict:
     require_packages("yaml")
     import yaml
@@ -264,28 +339,44 @@ def read_dataset_config(data_path: Path) -> dict:
     return config
 
 
+def dataset_root(data_path: Path, config: dict) -> Path:
+    root = Path(config.get("path", "."))
+    return root if root.is_absolute() else (data_path.parent / root).resolve()
+
+
 def labels_for_split(data_path: Path, split: str, config: dict) -> Iterator[tuple[Path, Path]]:
     split_path = Path(config.get(split, f"images/{split}"))
-    image_dir = split_path if split_path.is_absolute() else data_path.parent / split_path
+    root = dataset_root(data_path, config)
+    image_dir = split_path if split_path.is_absolute() else root / split_path
     if not image_dir.exists():
         return
     for image_path in sorted(path for path in image_dir.rglob("*") if path.suffix.lower() in SUPPORTED_IMAGES):
         relative = image_path.relative_to(image_dir)
-        label_dir = data_path.parent / "labels" / split
+        label_dir = root / "labels" / split
         yield image_path, label_dir / relative.with_suffix(".txt")
 
 
-def validate_dataset(data_path: Path) -> None:
+def validate_dataset(data_path: Path, required_splits: tuple[str, ...] = ("train", "val")) -> None:
     """Check YOLO label files before spending CPU time on a training run."""
     config = read_dataset_config(data_path)
     image_count = 0
     label_count = 0
     errors: list[str] = []
-    for split in ("train", "val", "test"):
-        for _, label_path in labels_for_split(data_path, split, config):
+    split_counts: dict[str, int] = {}
+    for split in required_splits:
+        split_count = 0
+        for image_path, label_path in labels_for_split(data_path, split, config):
             image_count += 1
+            split_count += 1
+            try:
+                from PIL import Image
+                with Image.open(image_path) as image:
+                    image.verify()
+            except Exception as error:
+                errors.append(f"Unreadable image: {image_path} ({error})")
+                continue
             if not label_path.is_file():
-                errors.append(f"Missing label file: {label_path}")
+                errors.append(f"Missing label file: {label_path} (use an empty file for a negative page)")
                 continue
             label_count += 1
             for line_number, line in enumerate(label_path.read_text(encoding="utf-8").splitlines(), start=1):
@@ -299,15 +390,20 @@ def validate_dataset(data_path: Path) -> None:
                 except ValueError:
                     errors.append(f"{label_path}:{line_number} contains non-numeric values")
                     continue
-                if class_id != 0 or any(value < 0 or value > 1 for value in coordinates):
-                    errors.append(f"{label_path}:{line_number} must use class 0 and normalized 0..1 coordinates")
-    if image_count == 0:
-        errors.append("No training images found in dataset/images/train, val, or test.")
+                x_center, y_center, width, height = coordinates
+                if class_id != 0 or not all(math.isfinite(value) for value in coordinates):
+                    errors.append(f"{label_path}:{line_number} must use class 0 and finite coordinates")
+                elif width <= 0 or height <= 0 or x_center - width / 2 < 0 or x_center + width / 2 > 1 or y_center - height / 2 < 0 or y_center + height / 2 > 1:
+                    errors.append(f"{label_path}:{line_number} has an empty or out-of-bounds box")
+        split_counts[split] = split_count
+        if split_count == 0:
+            errors.append(f"No images found for required split '{split}'.")
     if errors:
         message = "\n".join(f"- {error}" for error in errors[:20])
         extra = "\n- More errors omitted." if len(errors) > 20 else ""
         raise SystemExit(f"Dataset validation failed:\n{message}{extra}")
-    print(f"Dataset validation passed: {image_count} images, {label_count} label files.")
+    summary = ", ".join(f"{split}: {count}" for split, count in split_counts.items())
+    print(f"Dataset validation passed: {image_count} images, {label_count} label files ({summary}).")
 
 
 def run_validate_dataset(args: argparse.Namespace) -> None:
@@ -329,10 +425,10 @@ def run_train(args: argparse.Namespace) -> None:
 
 def run_evaluate(args: argparse.Namespace) -> None:
     data_path = project_path(args.data)
-    validate_dataset(data_path)
+    validate_dataset(data_path, (args.split,))
     model = load_yolo(project_path(args.weights))
     require_legal_notice_model(model)
-    metrics = model.val(data=str(data_path), imgsz=args.image_size, batch=args.batch, device="cpu", workers=0)
+    metrics = model.val(data=str(data_path), split=args.split, imgsz=args.image_size, batch=args.batch, device="cpu", workers=0)
     print(f"Evaluation complete. mAP50-95: {metrics.box.map:.4f}")
 
 
@@ -345,6 +441,7 @@ def create_parser() -> argparse.ArgumentParser:
     render = commands.add_parser("render", help="Render input PDF pages to output/rendered")
     render.add_argument("--input", default="input", help="PDF file or directory (default: input)")
     render.add_argument("--dpi", type=int, default=200, help="PDF render DPI (default: 200)")
+    render.add_argument("--name", help="Optional unique output run name")
     render.set_defaults(func=run_render)
 
     preview = commands.add_parser("preview-layout", help="Preview generic document-layout detections")
@@ -352,6 +449,7 @@ def create_parser() -> argparse.ArgumentParser:
     preview.add_argument("--dpi", type=int, default=200)
     preview.add_argument("--image-size", type=int, default=1280)
     preview.add_argument("--confidence", type=float, default=0.25)
+    preview.add_argument("--name", help="Optional unique output run name")
     preview.set_defaults(func=run_preview_layout)
 
     detect = commands.add_parser("detect", help="Detect legal notices using a custom trained model")
@@ -360,7 +458,15 @@ def create_parser() -> argparse.ArgumentParser:
     detect.add_argument("--dpi", type=int, default=200)
     detect.add_argument("--image-size", type=int, default=1280)
     detect.add_argument("--confidence", type=float, default=0.25)
+    detect.add_argument("--name", help="Optional unique output run name")
     detect.set_defaults(func=run_detect)
+
+    prepare = commands.add_parser("prepare-annotation", help="Render pages and create a manual-annotation review manifest")
+    prepare.add_argument("--input", default="input")
+    prepare.add_argument("--dpi", type=int, default=200)
+    prepare.add_argument("--include", action="append", help="Repeat FILE.pdf:PAGE,PAGE to select pages; default: all pages")
+    prepare.add_argument("--name", help="Optional unique output run name")
+    prepare.set_defaults(func=run_prepare_annotation)
 
     validate = commands.add_parser("validate-dataset", help="Validate YOLO labels before training")
     validate.add_argument("--data", default="dataset/data.yaml")
@@ -380,6 +486,7 @@ def create_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--weights", required=True)
     evaluate.add_argument("--image-size", type=int, default=1280)
     evaluate.add_argument("--batch", type=int, default=1)
+    evaluate.add_argument("--split", choices=("val", "test"), default="test")
     evaluate.set_defaults(func=run_evaluate)
     return parser
 

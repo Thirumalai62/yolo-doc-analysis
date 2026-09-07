@@ -10,11 +10,17 @@ __pycache__/
 /models/*
 !/models/.gitkeep
 /dataset/images/*
+!/dataset/images/
+!/dataset/images/**/
 !/dataset/images/**/.gitkeep
 /dataset/labels/*
+!/dataset/labels/
+!/dataset/labels/**/
 !/dataset/labels/**/.gitkeep
 /output/*
 !/output/.gitkeep
+/expected-output/*
+!/expected-output/.gitkeep
 /runs/*
 !/runs/.gitkeep
 

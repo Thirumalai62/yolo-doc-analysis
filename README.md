@@ -39,9 +39,22 @@ dependencies. It may take several minutes on the first run.
 .\.venv\Scripts\python.exe main.py preview-layout --input input
 ```
 
-Rendered pages are saved in `output/rendered/`; previews are saved in
-`output/layout_preview/`. Layout boxes represent text, titles, pictures and
-similar areas. They are not legal-notice results.
+Each command saves an isolated timestamped run under `output/`, so prior
+artifacts are not overwritten. Layout boxes represent text, titles, pictures
+and similar areas. They are not legal-notice results.
+
+## Prepare Annotation Review
+
+Create review assets for selected PDF pages before labeling. This creates
+rendered originals plus a manifest with the complete-notice boundary rules; it
+does not generate speculative boxes.
+
+```powershell
+.\.venv\Scripts\python.exe main.py prepare-annotation --input input --include gulftoday_2026-09-01.pdf:12,13 --include alfajr_2026-09-01.pdf:4,5,6
+```
+
+Omit `--include` to prepare every page. The generated `manifest.json` lists
+the source PDF and page number for each page sent to annotation.
 
 ## Label Training Data
 
@@ -66,7 +79,8 @@ dataset/
   labels/test/issue_020_page_0001.txt
 ```
 
-Each image has a matching `.txt` label file. Each notice uses class `0`:
+Each image has a matching `.txt` label file. A page with no legal notices must
+still have an empty matching `.txt` file. Each notice uses class `0`:
 
 ```text
 0 center_x center_y width height
@@ -95,7 +109,7 @@ confirm the process, then increase data and epochs. The best checkpoint is
 normally written to `runs/legal_notice/weights/best.pt`.
 
 ```powershell
-.\.venv\Scripts\python.exe main.py evaluate --weights runs/legal_notice/weights/best.pt
+.\.venv\Scripts\python.exe main.py evaluate --weights runs/legal_notice/weights/best.pt --split test
 ```
 
 Review precision, recall, and missed notices on the held-out test issues. A
@@ -111,8 +125,8 @@ command:
 .\.venv\Scripts\python.exe main.py detect --input input --weights runs/legal_notice/weights/best.pt
 ```
 
-The command saves annotated pages, an image crop per notice, and
-`output/legal_notices/detections.json`. All inference uses CPU.
+The command saves annotated pages, an image crop per notice, and a
+`detections.json` report in its isolated run directory. All inference uses CPU.
 
 ## License Note
 
