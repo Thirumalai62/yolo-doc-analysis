@@ -45,42 +45,47 @@ and similar areas. They are not legal-notice results.
 
 ## Prepare Annotation Review
 
-Create review assets for selected PDF pages before labeling. This creates
-rendered originals plus a manifest with the complete-notice boundary rules; it
-does not generate speculative boxes.
+Create review assets from a versioned JSON batch plan before labeling. The plan
+assigns each page a split and a positive or negative review role. The command
+uses unique issue-prefixed filenames, so one CVAT export can safely contain
+multiple issues.
 
 ```powershell
-.\.venv\Scripts\python.exe main.py prepare-annotation --input input --include gulftoday_2026-09-01.pdf:12,13 --include alfajr_2026-09-01.pdf:4,5,6
+ .\.venv\Scripts\python.exe main.py prepare-annotation --plan annotation_batches/legal_notice_v2.json --name legal_notice_v2
 ```
 
-Omit `--include` to prepare every page. The generated `manifest.json` lists
-the source PDF and page number for each page sent to annotation.
+Upload the images from the generated `cvat_upload/` folder. The generated
+`CHECKLIST.md` lists every frame, assigned split, role, and review note.
+Create one CVAT task per source issue. A negative page must remain in the task
+with no shapes; do not omit it from the export.
 
 ## Import CVAT Labels
 
 CVAT Online may limit exports that include images. Export annotations in YOLO
-format without images, retain the original PDF, then create local review
-overlays and crops by pairing each ZIP with its source PDF:
+format without images, then create local review overlays and crops from the
+prepared batch manifest:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py import-cvat --archive input/cvat_gulf_page_12.zip --source input/gulftoday_2026-09-01.pdf --archive input/cvat_alfajr_pages.zip --source input/alfajr_2026-09-01.pdf
+ .\.venv\Scripts\python.exe main.py import-cvat --manifest output/annotation_review/legal_notice_v2/manifest.json --archive input/cvat_alfajr_2026-09-02.zip --archive input/cvat_gulftoday_2026-09-02.zip --name legal_notice_v2
 ```
 
-The command expects one `--source` for every `--archive`, in the same order.
-It verifies the sole class is `legal_notice`, maps `page_0012.txt` to PDF page
-12, renders the source pages, and saves numbered overlays, notice crops, and
-an `import_report.json` under `output/cvat_import/`.
+It verifies that every manifest image appears exactly once across the exports,
+the sole class is `legal_notice`, positive pages contain boxes, and negative
+pages contain none. It also verifies the prepared image hashes before saving
+numbered overlays, notice crops, and an `import_report.json`.
 
-After approving the overlays, create splits by assigning whole source issues to
-training and leaving other issues for validation:
+After approving the overlays, create the manifest-defined train, validation,
+and test splits in a new destination. The default `dataset_v2/` protects the
+existing smoke-test dataset from being overwritten:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py prepare-dataset --report output/cvat_import/initial_cvat_review/import_report.json --train-source input/alfajr_2026-09-01.pdf
+ .\.venv\Scripts\python.exe main.py prepare-dataset --report output/cvat_import/legal_notice_v2/import_report.json --dataset dataset_v2
 ```
 
-The command refuses to overwrite existing dataset files and validates the
-result. It reconstructs labels from the reviewed pixel boxes, so use it only
-after annotation approval.
+The command refuses non-empty destinations, creates explicit empty `.txt`
+files for approved negative pages, and validates train, validation, and test.
+It reconstructs labels from the reviewed pixel boxes, so use it only after
+annotation approval.
 
 ## Label Training Data
 
@@ -141,6 +146,21 @@ normally written to `runs/legal_notice/weights/best.pt`.
 Review precision, recall, and missed notices on the held-out test issues. A
 zero prediction means the model found no notice; it does not prove the page
 contains none.
+
+## Review Validation Predictions
+
+Before evaluating the held-out test split, render every validation page with a
+candidate checkpoint and compare confidence thresholds. The command writes
+full-resolution overlays and a JSON report. Blue boxes are well-matched,
+orange boxes have a boundary issue, red boxes are false positives, and magenta
+boxes are missed approved notices.
+
+```powershell
+.\.venv\Scripts\python.exe main.py review-validation --data dataset_v2/data.yaml --weights runs/legal_notice_v2_experiment_50/weights/best.pt --name legal_notice_v2_experiment_50
+```
+
+Use the report's recommended threshold only after reviewing its false positives
+and misses. This command uses `val` only; it does not load or evaluate `test`.
 
 ## Detect Legal Notices
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
+import hashlib
 import json
 import math
 import shutil
@@ -296,35 +297,94 @@ def parse_page_selection(values: list[str] | None) -> dict[str, set[int]]:
     return selections
 
 
+def read_annotation_plan(plan_path: Path) -> list[dict[str, object]]:
+    """Load and validate a batch plan before rendering any annotation images."""
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"Invalid annotation plan: {plan_path}") from error
+    pages = plan.get("pages") if isinstance(plan, dict) else None
+    if not isinstance(pages, list) or not pages:
+        raise SystemExit("Annotation plan must contain a non-empty 'pages' list.")
+    seen_images: set[str] = set()
+    seen_sources: set[tuple[str, int]] = set()
+    for page in pages:
+        if not isinstance(page, dict):
+            raise SystemExit("Every annotation-plan page must be an object.")
+        source_pdf = page.get("source_pdf")
+        pdf_page = page.get("pdf_page")
+        image_name = page.get("image_name")
+        split = page.get("split")
+        role = page.get("role")
+        if not isinstance(source_pdf, str) or not isinstance(pdf_page, int) or not isinstance(image_name, str):
+            raise SystemExit("Every annotation-plan page needs source_pdf, pdf_page, and image_name.")
+        if split not in {"train", "val", "test"} or role not in {"positive", "negative"}:
+            raise SystemExit("Every annotation-plan page needs split train/val/test and role positive/negative.")
+        if pdf_page <= 0 or Path(image_name).name != image_name or Path(image_name).suffix.lower() != ".png":
+            raise SystemExit(f"Invalid page or image name in annotation plan: {source_pdf}:{pdf_page}")
+        if image_name in seen_images or (source_pdf, pdf_page) in seen_sources:
+            raise SystemExit(f"Duplicate annotation-plan page: {source_pdf}:{pdf_page}")
+        seen_images.add(image_name)
+        seen_sources.add((source_pdf, pdf_page))
+    return pages
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def run_prepare_annotation(args: argparse.Namespace) -> None:
-    """Render selected pages and record them for manual whole-notice annotation."""
+    """Render a manifest-driven batch with unique CVAT image names."""
     ensure_directories()
     output_root = create_run_directory("annotation_review", args.name)
-    rendered_root = output_root / "pages"
-    selections = parse_page_selection(args.include)
-    pages = render_input_pdfs(project_path(args.input), args.dpi, rendered_root, selections or None)
+    plan_path = project_path(args.plan)
+    pages = read_annotation_plan(plan_path)
+    upload_dir = output_root / "cvat_upload"
     selected: list[dict[str, object]] = []
-    for page in pages:
-        source_pdf = page.parent.name + ".pdf"
-        page_number = int(page.stem.removeprefix("page_"))
-        if selections and page_number not in selections.get(source_pdf, set()):
-            continue
+    for planned_page in pages:
+        source_path = project_path(str(planned_page["source_pdf"]))
+        if not source_path.is_file() or source_path.suffix.lower() != ".pdf":
+            raise SystemExit(f"Annotation-plan source PDF does not exist: {source_path}")
+        temporary_dir = output_root / "rendered" / source_path.stem
+        rendered = render_pdf(source_path, temporary_dir, args.dpi, {int(planned_page["pdf_page"])})
+        if len(rendered) != 1:
+            raise SystemExit(f"{source_path.name} does not contain PDF page {planned_page['pdf_page']}.")
+        # Issue folders make the intended one-task-per-issue CVAT upload unambiguous.
+        image_path = upload_dir / source_path.stem / str(planned_page["image_name"])
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(rendered[0]), image_path)
+        from PIL import Image
+        with Image.open(image_path) as image:
+            width, height = image.size
         selected.append({
-            "source_pdf": source_pdf,
-            "pdf_page": page_number,
-            "image": str(page.relative_to(PROJECT_ROOT)),
+            **planned_page,
+            "image": str(image_path.relative_to(PROJECT_ROOT)),
+            "width": width,
+            "height": height,
+            "sha256": sha256_file(image_path),
             "status": "needs_manual_annotation",
         })
-    if selections and not selected:
-        raise SystemExit("No rendered pages matched --include. Check the PDF filenames and page numbers.")
     manifest = {
+        "batch_plan": str(plan_path.relative_to(PROJECT_ROOT)),
         "class_name": LEGAL_NOTICE_CLASS,
-        "instructions": "Draw one tight rectangle around each complete published legal notice. Include attached authority/header, logo, body, border, and notice-specific footer. Exclude advertisements, editorial content, and page-level newspaper furniture.",
+        "instructions": "Draw one tight rectangle around each complete published court or authority-issued legal notice. Include attached authority/header, logo, body, border, internal table, and notice-specific footer. Exclude advertisements, editorial content, private name-change announcements, lost-passport notices, lost-share-certificate classifieds, and page-level newspaper furniture. Keep adjacent notices separate.",
         "pages": selected,
     }
     manifest_path = output_root / "manifest.json"
     manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    checklist = ["# CVAT Annotation Checklist", "", "Create one CVAT task per source issue, using only that issue's images.", "", "| Image | Split | Role | Review note |", "|---|---|---|---|"]
+    checklist.extend(
+        f"| `{Path(page['image']).parent.name}/{page['image_name']}` | {page['split']} | {page['role']} | {page.get('reason', '')} |"
+        for page in selected
+    )
+    checklist.extend(["", "Positive pages: draw one box per complete court or authority-issued notice.", "Negative pages: draw no boxes; their presence in the CVAT export is required.", "Exclude private name changes, lost passports, lost-share certificates, advertisements, and editorial content."])
+    (output_root / "CHECKLIST.md").write_text("\n".join(checklist) + "\n", encoding="utf-8")
     print(f"Prepared {len(selected)} page(s): {output_root.relative_to(PROJECT_ROOT)}")
+    print(f"Upload these uniquely named images: {upload_dir.relative_to(PROJECT_ROOT)}")
     print(f"Review manifest: {manifest_path.relative_to(PROJECT_ROOT)}")
 
 
@@ -381,21 +441,33 @@ def save_annotation_review(image_path: Path, boxes: list[tuple[float, float, flo
 
 
 def run_import_cvat(args: argparse.Namespace) -> None:
-    """Match annotation-only CVAT exports to PDFs and create visual QA artifacts."""
-    if len(args.archive) != len(args.source):
-        raise SystemExit("Use the same number of --archive and --source arguments, in matching order.")
+    """Import a manifest-backed CVAT export and create visual QA artifacts."""
     ensure_directories()
     output_root = create_run_directory("cvat_import", args.name)
+    manifest_path = project_path(args.manifest)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        raise SystemExit(f"Invalid annotation manifest: {manifest_path}") from error
+    pages = manifest.get("pages") if isinstance(manifest, dict) else None
+    if not isinstance(manifest, dict) or manifest.get("class_name") != LEGAL_NOTICE_CLASS or not isinstance(pages, list) or not pages:
+        raise SystemExit("Annotation manifest must contain the legal_notice class and at least one page.")
+    planned_by_image: dict[str, dict] = {}
+    for page in pages:
+        if not isinstance(page, dict) or not isinstance(page.get("image_name"), str):
+            raise SystemExit("Annotation manifest has an invalid page entry.")
+        image_name = page["image_name"]
+        if image_name in planned_by_image:
+            raise SystemExit(f"Duplicate image name in annotation manifest: {image_name}")
+        if page.get("split") not in {"train", "val", "test"} or page.get("role") not in {"positive", "negative"}:
+            raise SystemExit(f"Annotation manifest lacks split or role for: {image_name}")
+        planned_by_image[image_name] = page
     report: list[dict[str, object]] = []
-    seen_pages: set[tuple[Path, int]] = set()
-
-    for archive_value, source_value in zip(args.archive, args.source):
+    exported: dict[str, tuple[Path, str | None]] = {}
+    for archive_value in args.archive:
         archive_path = project_path(archive_value)
-        source_path = project_path(source_value)
         if not archive_path.is_file():
             raise SystemExit(f"CVAT archive does not exist: {archive_path}")
-        if not source_path.is_file() or source_path.suffix.lower() != ".pdf":
-            raise SystemExit(f"Source must be an existing PDF: {source_path}")
         with ZipFile(archive_path) as archive:
             try:
                 names = archive.read("obj.names").decode("utf-8").splitlines()
@@ -403,48 +475,61 @@ def run_import_cvat(args: argparse.Namespace) -> None:
                 raise SystemExit(f"{archive_path} is not a supported CVAT YOLO export (missing obj.names).") from error
             if names != [LEGAL_NOTICE_CLASS]:
                 raise SystemExit(f"{archive_path} must contain only the '{LEGAL_NOTICE_CLASS}' class.")
-            label_entries = sorted(entry for entry in archive.namelist() if entry.startswith("obj_train_data/") and entry.endswith(".txt"))
-            if not label_entries:
-                raise SystemExit(f"{archive_path} contains no YOLO label files.")
-            page_numbers: dict[str, int] = {}
-            for entry in label_entries:
-                stem = Path(entry).stem
-                if not stem.startswith("page_") or not stem[5:].isdigit():
-                    raise SystemExit(f"Cannot map CVAT label to a PDF page: {entry}")
-                page_numbers[entry] = int(stem[5:])
-            duplicate_pages = [(source_path, page) for page in page_numbers.values() if (source_path, page) in seen_pages]
-            if duplicate_pages:
-                raise SystemExit(f"Duplicate source-page mapping: {duplicate_pages[0][0].name} page {duplicate_pages[0][1]}")
-            rendered_root = output_root / "pages" / source_path.stem
-            rendered = render_pdf(source_path, rendered_root, args.dpi, set(page_numbers.values()))
-            rendered_by_page = {int(path.stem.removeprefix("page_")): path for path in rendered}
-            for entry in label_entries:
-                page_number = page_numbers[entry]
-                image_path = rendered_by_page.get(page_number)
-                if image_path is None:
-                    raise SystemExit(f"{source_path.name} does not contain PDF page {page_number}.")
-                boxes = parse_yolo_labels(f"{archive_path.name}:{entry}", archive.read(entry).decode("utf-8"))
-                page_root = output_root / "review" / source_path.stem / image_path.stem
-                notices = save_annotation_review(image_path, boxes, page_root)
-                report.append({
-                    "cvat_archive": archive_path.name,
-                    "source_pdf": str(source_path.relative_to(PROJECT_ROOT)),
-                    "pdf_page": page_number,
-                    "image": str(image_path.relative_to(PROJECT_ROOT)),
-                    "annotated_image": str((page_root / "annotated.png").relative_to(PROJECT_ROOT)),
-                    "notice_count": len(notices),
-                    "notices": notices,
-                })
-                seen_pages.add((source_path, page_number))
+            try:
+                image_entries = [Path(line.strip()).name for line in archive.read("train.txt").decode("utf-8").splitlines() if line.strip()]
+            except KeyError as error:
+                raise SystemExit(f"{archive_path} is missing train.txt, so reviewed negative pages cannot be verified.") from error
+            label_entries = {Path(entry).stem: entry for entry in archive.namelist() if entry.startswith("obj_train_data/") and entry.endswith(".txt")}
+            for image_name in image_entries:
+                if image_name in exported:
+                    raise SystemExit(f"CVAT image appears in more than one archive: {image_name}")
+                exported[image_name] = (archive_path, label_entries.get(Path(image_name).stem))
+            unexpected_labels = set(label_entries) - {Path(name).stem for name in image_entries}
+            if unexpected_labels:
+                raise SystemExit(f"CVAT archive has labels without matching images: {sorted(unexpected_labels)[0]}.txt")
+
+    missing = set(planned_by_image) - set(exported)
+    unexpected = set(exported) - set(planned_by_image)
+    if missing or unexpected:
+        detail = f"missing {sorted(missing)[0]}" if missing else f"unexpected {sorted(unexpected)[0]}"
+        raise SystemExit(f"CVAT export does not exactly match the annotation manifest: {detail}.")
+    for image_name, planned_page in planned_by_image.items():
+        archive_path, label_entry = exported[image_name]
+        with ZipFile(archive_path) as archive:
+            content = archive.read(label_entry).decode("utf-8") if label_entry else ""
+        boxes = parse_yolo_labels(f"{archive_path.name}:{label_entry or image_name}", content)
+        if planned_page["role"] == "positive" and not boxes:
+            raise SystemExit(f"Expected at least one notice on positive page: {image_name}")
+        if planned_page["role"] == "negative" and boxes:
+            raise SystemExit(f"Negative page contains legal_notice boxes: {image_name}")
+        image_path = project_path(str(planned_page.get("image")))
+        if not image_path.is_file() or sha256_file(image_path) != planned_page.get("sha256"):
+            raise SystemExit(f"Prepared image is missing or changed since manifest creation: {image_name}")
+        source_pdf = str(planned_page["source_pdf"])
+        page_number = int(planned_page["pdf_page"])
+        page_root = output_root / "review" / Path(image_name).stem
+        notices = save_annotation_review(image_path, boxes, page_root)
+        report.append({
+            "cvat_archive": archive_path.name,
+            "source_pdf": source_pdf,
+            "pdf_page": page_number,
+            "image_name": image_name,
+            "image": str(image_path.relative_to(PROJECT_ROOT)),
+            "split": planned_page["split"],
+            "role": planned_page["role"],
+            "annotated_image": str((page_root / "annotated.png").relative_to(PROJECT_ROOT)),
+            "notice_count": len(notices),
+            "notices": notices,
+        })
 
     report_path = output_root / "import_report.json"
-    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    report_path.write_text(json.dumps({"manifest": str(manifest_path.relative_to(PROJECT_ROOT)), "pages": report}, indent=2), encoding="utf-8")
     print(f"Imported {len(report)} annotated page(s) and {sum(page['notice_count'] for page in report)} notice box(es).")
     print(f"Review report: {report_path.relative_to(PROJECT_ROOT)}")
 
 
 def run_prepare_dataset(args: argparse.Namespace) -> None:
-    """Promote approved review pages into issue-separated YOLO train/validation splits."""
+    """Promote approved manifest-backed pages into a separate YOLO dataset."""
     report_path = project_path(args.report)
     if not report_path.is_file():
         raise SystemExit(f"Import report does not exist: {report_path}")
@@ -452,32 +537,28 @@ def run_prepare_dataset(args: argparse.Namespace) -> None:
         report = json.loads(report_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as error:
         raise SystemExit(f"Invalid import report: {report_path}") from error
-    if not isinstance(report, list) or not report:
+    pages = report.get("pages") if isinstance(report, dict) else None
+    if not isinstance(pages, list) or not pages:
         raise SystemExit(f"Import report contains no annotated pages: {report_path}")
-
-    train_sources = {str(project_path(source).relative_to(PROJECT_ROOT)) for source in args.train_source}
-    available_sources = {page.get("source_pdf") for page in report}
-    unknown_sources = train_sources - available_sources
-    if unknown_sources:
-        raise SystemExit(f"--train-source is not present in the report: {sorted(unknown_sources)[0]}")
-    if len(available_sources) - len(train_sources) == 0:
-        raise SystemExit("At least one distinct source PDF must remain for validation.")
+    dataset_dir = project_path(args.dataset)
+    if dataset_dir.exists() and any(dataset_dir.iterdir()):
+        raise SystemExit(f"Dataset destination already exists and is not empty: {dataset_dir}. Do not overwrite labeled data.")
 
     staged: list[tuple[dict, str, Path, Path]] = []
-    for page in report:
+    for page in pages:
         source_pdf = page.get("source_pdf")
         image_value = page.get("image")
         notices = page.get("notices")
         page_number = page.get("pdf_page")
-        if not isinstance(source_pdf, str) or not isinstance(image_value, str) or not isinstance(notices, list) or not isinstance(page_number, int):
+        split = page.get("split")
+        if not isinstance(source_pdf, str) or not isinstance(image_value, str) or not isinstance(notices, list) or not isinstance(page_number, int) or split not in {"train", "val", "test"}:
             raise SystemExit("Import report has an invalid page entry.")
-        split = "train" if source_pdf in train_sources else "val"
         image_path = project_path(image_value)
         if not image_path.is_file():
             raise SystemExit(f"Imported source image is missing: {image_path}")
         image_name = f"{Path(source_pdf).stem}_page_{page_number:04d}.png"
-        destination_image = DATASET_DIR / "images" / split / image_name
-        destination_label = DATASET_DIR / "labels" / split / image_name.replace(".png", ".txt")
+        destination_image = dataset_dir / "images" / split / image_name
+        destination_label = dataset_dir / "labels" / split / image_name.replace(".png", ".txt")
         if destination_image.exists() or destination_label.exists():
             raise SystemExit(f"Dataset destination already exists: {destination_image}. Do not overwrite labeled data.")
         staged.append((page, split, destination_image, destination_label))
@@ -497,11 +578,13 @@ def run_prepare_dataset(args: argparse.Namespace) -> None:
                 width = (x2 - x1) / image.width
                 height = (y2 - y1) / image.height
                 lines.append(f"0 {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}")
-        destination_label.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        destination_label.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
         print(f"Added {split}: {destination_image.relative_to(PROJECT_ROOT)} ({len(page['notices'])} notices)")
 
-    validate_dataset(DATASET_DIR / "data.yaml")
-    print("Dataset preparation complete. These splits are for a pipeline check, not production evaluation.")
+    data_path = dataset_dir / "data.yaml"
+    data_path.write_text("train: images/train\nval: images/val\ntest: images/test\nnames: [legal_notice]\n", encoding="utf-8")
+    validate_dataset(data_path, ("train", "val", "test"))
+    print(f"Dataset preparation complete: {dataset_dir.relative_to(PROJECT_ROOT)}")
 
 
 def read_dataset_config(data_path: Path) -> dict:
@@ -588,6 +671,133 @@ def run_validate_dataset(args: argparse.Namespace) -> None:
     validate_dataset(project_path(args.data))
 
 
+def box_iou(first: tuple[float, float, float, float], second: tuple[float, float, float, float]) -> float:
+    """Return IoU for normalized center-width-height boxes."""
+    first_x1, first_y1 = first[0] - first[2] / 2, first[1] - first[3] / 2
+    first_x2, first_y2 = first[0] + first[2] / 2, first[1] + first[3] / 2
+    second_x1, second_y1 = second[0] - second[2] / 2, second[1] - second[3] / 2
+    second_x2, second_y2 = second[0] + second[2] / 2, second[1] + second[3] / 2
+    intersection_width = max(0.0, min(first_x2, second_x2) - max(first_x1, second_x1))
+    intersection_height = max(0.0, min(first_y2, second_y2) - max(first_y1, second_y1))
+    intersection = intersection_width * intersection_height
+    union = first[2] * first[3] + second[2] * second[3] - intersection
+    return intersection / union if union else 0.0
+
+
+def match_boxes(predictions: list[tuple[float, float, float, float]], targets: list[tuple[float, float, float, float]]) -> tuple[list[tuple[int, int, float]], list[int], list[int]]:
+    """Greedily match highest-IoU predictions and targets once each."""
+    candidates = sorted(
+        ((box_iou(prediction, target), prediction_index, target_index)
+         for prediction_index, prediction in enumerate(predictions)
+         for target_index, target in enumerate(targets)),
+        reverse=True,
+    )
+    matches: list[tuple[int, int, float]] = []
+    matched_predictions: set[int] = set()
+    matched_targets: set[int] = set()
+    for iou, prediction_index, target_index in candidates:
+        if iou < 0.5:
+            break
+        if prediction_index not in matched_predictions and target_index not in matched_targets:
+            matches.append((prediction_index, target_index, iou))
+            matched_predictions.add(prediction_index)
+            matched_targets.add(target_index)
+    return matches, [index for index in range(len(predictions)) if index not in matched_predictions], [index for index in range(len(targets)) if index not in matched_targets]
+
+
+def threshold_values(value: str) -> list[float]:
+    try:
+        values = [float(item) for item in value.split(",")]
+    except ValueError as error:
+        raise SystemExit("--thresholds must be comma-separated numbers between 0 and 1.") from error
+    if not values or any(value <= 0 or value >= 1 for value in values):
+        raise SystemExit("--thresholds must be comma-separated numbers between 0 and 1.")
+    return sorted(set(values))
+
+
+def run_review_validation(args: argparse.Namespace) -> None:
+    """Score and render only validation pages across candidate confidence thresholds."""
+    from PIL import Image, ImageDraw
+
+    data_path = project_path(args.data)
+    validate_dataset(data_path)
+    config = read_dataset_config(data_path)
+    model = load_yolo(project_path(args.weights))
+    require_legal_notice_model(model)
+    pages = list(labels_for_split(data_path, "val", config))
+    if not pages:
+        raise SystemExit("No validation pages found.")
+    thresholds = threshold_values(args.thresholds)
+    targets_by_image = {
+        image_path: parse_yolo_labels(str(label_path), label_path.read_text(encoding="utf-8"))
+        for image_path, label_path in pages
+    }
+    predictions_by_threshold: dict[float, dict[Path, list[tuple[float, float, float, float, float]]]] = {}
+    for threshold in thresholds:
+        results = model.predict([str(image_path) for image_path, _ in pages], conf=threshold, imgsz=args.image_size, device="cpu", verbose=False)
+        predictions_by_threshold[threshold] = {
+            image_path: [(*box.xywhn[0].tolist(), float(box.conf[0])) for box in result.boxes]
+            for (image_path, _), result in zip(pages, results)
+        }
+
+    summaries: dict[str, dict[str, float | int]] = {}
+    for threshold, by_image in predictions_by_threshold.items():
+        true_positive = false_positive = false_negative = boundary_issues = 0
+        for image_path, _ in pages:
+            predictions = [box[:4] for box in by_image[image_path]]
+            matches, unmatched_predictions, unmatched_targets = match_boxes(predictions, targets_by_image[image_path])
+            true_positive += len(matches)
+            false_positive += len(unmatched_predictions)
+            false_negative += len(unmatched_targets)
+            boundary_issues += sum(iou < 0.75 for _, _, iou in matches)
+        precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
+        recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        summaries[f"{threshold:.3f}"] = {"threshold": threshold, "true_positives": true_positive, "false_positives": false_positive, "false_negatives": false_negative, "boundary_issues": boundary_issues, "precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4)}
+    recommended_key = max(summaries, key=lambda key: (summaries[key]["f1"], summaries[key]["precision"]))
+    recommended_threshold = float(summaries[recommended_key]["threshold"])
+
+    output_root = create_run_directory("validation_review", args.name)
+    pages_report: list[dict[str, object]] = []
+    newspapers: dict[str, dict[str, int]] = {}
+    for image_path, _ in pages:
+        targets = targets_by_image[image_path]
+        predictions_with_confidence = predictions_by_threshold[recommended_threshold][image_path]
+        predictions = [box[:4] for box in predictions_with_confidence]
+        matches, unmatched_predictions, unmatched_targets = match_boxes(predictions, targets)
+        newspaper = image_path.name.split("_")[0]
+        totals = newspapers.setdefault(newspaper, {"pages": 0, "true_positives": 0, "false_positives": 0, "false_negatives": 0, "boundary_issues": 0})
+        totals["pages"] += 1
+        totals["true_positives"] += len(matches)
+        totals["false_positives"] += len(unmatched_predictions)
+        totals["false_negatives"] += len(unmatched_targets)
+        totals["boundary_issues"] += sum(iou < 0.75 for _, _, iou in matches)
+        image = Image.open(image_path).convert("RGB")
+        overlay = image.copy()
+        draw = ImageDraw.Draw(overlay)
+
+        def draw_box(box: tuple[float, float, float, float], color: str) -> None:
+            x_center, y_center, width, height = box
+            draw.rectangle(((x_center - width / 2) * image.width, (y_center - height / 2) * image.height, (x_center + width / 2) * image.width, (y_center + height / 2) * image.height), outline=color, width=max(3, image.width // 500))
+
+        for prediction_index, target_index, iou in matches:
+            draw_box(predictions[prediction_index], "blue" if iou >= 0.75 else "orange")
+        for prediction_index in unmatched_predictions:
+            draw_box(predictions[prediction_index], "red")
+        for target_index in unmatched_targets:
+            draw_box(targets[target_index], "magenta")
+        destination = output_root / "pages" / newspaper / image_path.name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        overlay.save(destination)
+        pages_report.append({"image": str(image_path.relative_to(PROJECT_ROOT)), "newspaper": newspaper, "overlay": str(destination.relative_to(PROJECT_ROOT)), "targets": len(targets), "predictions": len(predictions), "matches": len(matches), "false_positive_boxes": [predictions_with_confidence[index] for index in unmatched_predictions], "missed_target_boxes": [targets[index] for index in unmatched_targets], "boundary_issue_matches": [{"prediction": prediction_index, "target": target_index, "iou": round(iou, 4)} for prediction_index, target_index, iou in matches if iou < 0.75]})
+    report = {"weights": str(project_path(args.weights).relative_to(PROJECT_ROOT)), "split": "val", "matching_iou": 0.5, "boundary_issue_iou_below": 0.75, "recommended_threshold": recommended_threshold, "thresholds": summaries, "newspapers": newspapers, "pages": pages_report, "legend": {"blue": "matched box, IoU >= 0.75", "orange": "matched box with boundary issue", "red": "false-positive prediction", "magenta": "missed ground-truth notice"}}
+    report_path = output_root / "validation_report.json"
+    report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    print(f"Validation review complete: {output_root.relative_to(PROJECT_ROOT)}")
+    print(f"Recommended confidence threshold: {recommended_threshold:.3f}")
+    print(f"Report: {report_path.relative_to(PROJECT_ROOT)}")
+
+
 def run_train(args: argparse.Namespace) -> None:
     data_path = project_path(args.data)
     validate_dataset(data_path)
@@ -639,28 +849,34 @@ def create_parser() -> argparse.ArgumentParser:
     detect.add_argument("--name", help="Optional unique output run name")
     detect.set_defaults(func=run_detect)
 
-    prepare = commands.add_parser("prepare-annotation", help="Render pages and create a manual-annotation review manifest")
-    prepare.add_argument("--input", default="input")
+    prepare = commands.add_parser("prepare-annotation", help="Render a manifest-driven CVAT annotation batch")
+    prepare.add_argument("--plan", required=True, help="JSON batch plan with source pages, roles, and splits")
     prepare.add_argument("--dpi", type=int, default=200)
-    prepare.add_argument("--include", action="append", help="Repeat FILE.pdf:PAGE,PAGE to select pages; default: all pages")
     prepare.add_argument("--name", help="Optional unique output run name")
     prepare.set_defaults(func=run_prepare_annotation)
 
-    cvat_import = commands.add_parser("import-cvat", help="Import annotation-only CVAT YOLO exports and generate review overlays")
-    cvat_import.add_argument("--archive", action="append", required=True, help="CVAT YOLO ZIP; repeat in the same order as --source")
-    cvat_import.add_argument("--source", action="append", required=True, help="Source PDF; repeat in the same order as --archive")
-    cvat_import.add_argument("--dpi", type=int, default=200)
+    cvat_import = commands.add_parser("import-cvat", help="Import manifest-backed CVAT YOLO exports and generate review overlays")
+    cvat_import.add_argument("--manifest", required=True, help="manifest.json created by prepare-annotation")
+    cvat_import.add_argument("--archive", action="append", required=True, help="CVAT YOLO annotation ZIP; repeat for separate tasks")
     cvat_import.add_argument("--name", help="Optional unique output run name")
     cvat_import.set_defaults(func=run_import_cvat)
 
-    prepare_dataset = commands.add_parser("prepare-dataset", help="Copy approved CVAT review pages into issue-separated YOLO splits")
+    prepare_dataset = commands.add_parser("prepare-dataset", help="Copy approved CVAT review pages into a separate YOLO dataset")
     prepare_dataset.add_argument("--report", required=True, help="import_report.json from import-cvat")
-    prepare_dataset.add_argument("--train-source", action="append", required=True, help="Source PDF assigned to train; repeat as needed")
+    prepare_dataset.add_argument("--dataset", default="dataset_v2", help="Empty destination dataset directory (default: dataset_v2)")
     prepare_dataset.set_defaults(func=run_prepare_dataset)
 
     validate = commands.add_parser("validate-dataset", help="Validate YOLO labels before training")
     validate.add_argument("--data", default="dataset/data.yaml")
     validate.set_defaults(func=run_validate_dataset)
+
+    review = commands.add_parser("review-validation", help="Render validation-only predictions and threshold error reports")
+    review.add_argument("--data", default="dataset_v2/data.yaml")
+    review.add_argument("--weights", required=True)
+    review.add_argument("--image-size", type=int, default=1280)
+    review.add_argument("--thresholds", default="0.05,0.1,0.15,0.2,0.25,0.3")
+    review.add_argument("--name", help="Optional unique output run name")
+    review.set_defaults(func=run_review_validation)
 
     train = commands.add_parser("train", help="Fine-tune a legal-notice model using CPU")
     train.add_argument("--data", default="dataset/data.yaml")

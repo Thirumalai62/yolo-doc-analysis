@@ -22,12 +22,15 @@ __pycache__/
 !/dataset/labels/val/.gitkeep
 /dataset/labels/test/*
 !/dataset/labels/test/.gitkeep
+/dataset_v2/
 /output/*
 !/output/.gitkeep
 /expected-output/*
 !/expected-output/.gitkeep
 /runs/*
 !/runs/.gitkeep
+/annotation_batches/*
+!/annotation_batches/.gitkeep
 
 # Tool and operating-system files
 .huggingface/
