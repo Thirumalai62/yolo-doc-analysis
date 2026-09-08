@@ -307,7 +307,9 @@ def read_annotation_plan(plan_path: Path) -> list[dict[str, object]]:
     if not isinstance(pages, list) or not pages:
         raise SystemExit("Annotation plan must contain a non-empty 'pages' list.")
     seen_images: set[str] = set()
-    seen_sources: set[tuple[str, int]] = set()
+    seen_sources: set[tuple[Path, int]] = set()
+    issue_splits: dict[str, str] = {}
+    issue_sources: dict[str, Path] = {}
     for page in pages:
         if not isinstance(page, dict):
             raise SystemExit("Every annotation-plan page must be an object.")
@@ -318,14 +320,27 @@ def read_annotation_plan(plan_path: Path) -> list[dict[str, object]]:
         role = page.get("role")
         if not isinstance(source_pdf, str) or not isinstance(pdf_page, int) or not isinstance(image_name, str):
             raise SystemExit("Every annotation-plan page needs source_pdf, pdf_page, and image_name.")
+        source_path = project_path(source_pdf).resolve()
+        newspaper = page.get("newspaper", source_path.stem.split("_")[0])
+        issue_id = page.get("issue_id", source_path.stem)
+        if not isinstance(newspaper, str) or not newspaper or not isinstance(issue_id, str) or not issue_id:
+            raise SystemExit("Annotation-plan newspaper and issue_id values must be non-empty strings.")
+        page["newspaper"] = newspaper
+        page["issue_id"] = issue_id
         if split not in {"train", "val", "test"} or role not in {"positive", "negative"}:
             raise SystemExit("Every annotation-plan page needs split train/val/test and role positive/negative.")
         if pdf_page <= 0 or Path(image_name).name != image_name or Path(image_name).suffix.lower() != ".png":
             raise SystemExit(f"Invalid page or image name in annotation plan: {source_pdf}:{pdf_page}")
-        if image_name in seen_images or (source_pdf, pdf_page) in seen_sources:
+        if image_name in seen_images or (source_path, pdf_page) in seen_sources:
             raise SystemExit(f"Duplicate annotation-plan page: {source_pdf}:{pdf_page}")
+        if issue_id in issue_splits and issue_splits[issue_id] != split:
+            raise SystemExit(f"Issue {issue_id} is assigned to multiple splits.")
+        if issue_id in issue_sources and issue_sources[issue_id] != source_path:
+            raise SystemExit(f"Issue {issue_id} maps to multiple source PDFs.")
         seen_images.add(image_name)
-        seen_sources.add((source_pdf, pdf_page))
+        seen_sources.add((source_path, pdf_page))
+        issue_splits[issue_id] = split
+        issue_sources[issue_id] = source_path
     return pages
 
 
@@ -343,6 +358,9 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
     output_root = create_run_directory("annotation_review", args.name)
     plan_path = project_path(args.plan)
     pages = read_annotation_plan(plan_path)
+    plan_document = json.loads(plan_path.read_text(encoding="utf-8"))
+    scope = plan_document.get("scope", {}) if isinstance(plan_document, dict) else {}
+    scope_exclusions = scope.get("exclude") if isinstance(scope, dict) else None
     upload_dir = output_root / "cvat_upload"
     selected: list[dict[str, object]] = []
     for planned_page in pages:
@@ -368,10 +386,13 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
             "sha256": sha256_file(image_path),
             "status": "needs_manual_annotation",
         })
+    instructions = "Draw one tight rectangle around each complete published court or authority-issued legal notice. Include attached authority/header, logo, body, border, internal table, and notice-specific footer. Exclude advertisements, editorial content, private name-change announcements, lost-passport notices, lost-share-certificate classifieds, and page-level newspaper furniture. Keep adjacent notices separate."
+    if isinstance(scope_exclusions, str) and scope_exclusions:
+        instructions += f" Batch-specific exclusions: {scope_exclusions}"
     manifest = {
         "batch_plan": str(plan_path.relative_to(PROJECT_ROOT)),
         "class_name": LEGAL_NOTICE_CLASS,
-        "instructions": "Draw one tight rectangle around each complete published court or authority-issued legal notice. Include attached authority/header, logo, body, border, internal table, and notice-specific footer. Exclude advertisements, editorial content, private name-change announcements, lost-passport notices, lost-share-certificate classifieds, and page-level newspaper furniture. Keep adjacent notices separate.",
+        "instructions": instructions,
         "pages": selected,
     }
     manifest_path = output_root / "manifest.json"
@@ -381,7 +402,7 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
         f"| `{Path(page['image']).parent.name}/{page['image_name']}` | {page['split']} | {page['role']} | {page.get('reason', '')} |"
         for page in selected
     )
-    checklist.extend(["", "Positive pages: draw one box per complete court or authority-issued notice.", "Negative pages: draw no boxes; their presence in the CVAT export is required.", "Exclude private name changes, lost passports, lost-share certificates, advertisements, and editorial content."])
+    checklist.extend(["", "Positive pages: draw one box per complete court or authority-issued notice.", "Negative pages: draw no boxes; their presence in the CVAT export is required.", f"Exclusions: {scope_exclusions}" if scope_exclusions else "Exclude private name changes, lost passports, lost-share certificates, advertisements, and editorial content."])
     (output_root / "CHECKLIST.md").write_text("\n".join(checklist) + "\n", encoding="utf-8")
     print(f"Prepared {len(selected)} page(s): {output_root.relative_to(PROJECT_ROOT)}")
     print(f"Upload these uniquely named images: {upload_dir.relative_to(PROJECT_ROOT)}")
@@ -517,6 +538,8 @@ def run_import_cvat(args: argparse.Namespace) -> None:
             "image": str(image_path.relative_to(PROJECT_ROOT)),
             "split": planned_page["split"],
             "role": planned_page["role"],
+            "newspaper": planned_page.get("newspaper"),
+            "issue_id": planned_page.get("issue_id"),
             "annotated_image": str((page_root / "annotated.png").relative_to(PROJECT_ROOT)),
             "notice_count": len(notices),
             "notices": notices,
