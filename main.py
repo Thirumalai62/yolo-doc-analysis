@@ -361,6 +361,9 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
     plan_document = json.loads(plan_path.read_text(encoding="utf-8"))
     scope = plan_document.get("scope", {}) if isinstance(plan_document, dict) else {}
     scope_exclusions = scope.get("exclude") if isinstance(scope, dict) else None
+    split_notes = plan_document.get("split_notes", []) if isinstance(plan_document, dict) else []
+    if not isinstance(split_notes, list) or not all(isinstance(note, str) for note in split_notes):
+        raise SystemExit("Annotation-plan split_notes must be a list of strings.")
     upload_dir = output_root / "cvat_upload"
     selected: list[dict[str, object]] = []
     for planned_page in pages:
@@ -393,6 +396,7 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
         "batch_plan": str(plan_path.relative_to(PROJECT_ROOT)),
         "class_name": LEGAL_NOTICE_CLASS,
         "instructions": instructions,
+        "split_notes": split_notes,
         "pages": selected,
     }
     manifest_path = output_root / "manifest.json"
@@ -403,6 +407,8 @@ def run_prepare_annotation(args: argparse.Namespace) -> None:
         for page in selected
     )
     checklist.extend(["", "Positive pages: draw one box per complete court or authority-issued notice.", "Negative pages: draw no boxes; their presence in the CVAT export is required.", f"Exclusions: {scope_exclusions}" if scope_exclusions else "Exclude private name changes, lost passports, lost-share certificates, advertisements, and editorial content."])
+    if split_notes:
+        checklist.extend(["", "## Split Notes", "", *(f"- {note}" for note in split_notes)])
     (output_root / "CHECKLIST.md").write_text("\n".join(checklist) + "\n", encoding="utf-8")
     print(f"Prepared {len(selected)} page(s): {output_root.relative_to(PROJECT_ROOT)}")
     print(f"Upload these uniquely named images: {upload_dir.relative_to(PROJECT_ROOT)}")
