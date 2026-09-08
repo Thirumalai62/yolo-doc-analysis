@@ -23,6 +23,7 @@ __pycache__/
 /dataset/labels/test/*
 !/dataset/labels/test/.gitkeep
 /dataset_v2/
+/dataset_v3/
 /output/*
 !/output/.gitkeep
 /expected-output/*

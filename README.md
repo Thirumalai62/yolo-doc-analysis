@@ -135,6 +135,16 @@ Fine-tune the local medium model on CPU:
 .\.venv\Scripts\python.exe main.py train --epochs 50 --batch 1
 ```
 
+For full-page document fine-tuning, explicitly reduce augmentation that can
+mirror or clip large notices and save intermediate checkpoints:
+
+```powershell
+.\.venv\Scripts\python.exe main.py train --data dataset_v3/data.yaml --weights runs/legal_notice_v2_experiment_50/weights/best.pt --epochs 50 --batch 1 --optimizer AdamW --learning-rate 0.0005 --momentum 0.9 --warmup-bias-lr 0 --mosaic 0 --scale 0.1 --translate 0.02 --fliplr 0 --close-mosaic 0 --save-period 5 --name legal_notice_v3_controlled_50
+```
+
+Training refuses to reuse an existing run name so prior checkpoints are not
+overwritten.
+
 CPU training with 1280 pixel pages is slow. Start with a small labeled set to
 confirm the process, then increase data and epochs. The best checkpoint is
 normally written to `runs/legal_notice/weights/best.pt`.
@@ -156,19 +166,138 @@ orange boxes have a boundary issue, red boxes are false positives, and magenta
 boxes are missed approved notices.
 
 ```powershell
-.\.venv\Scripts\python.exe main.py review-validation --data dataset_v2/data.yaml --weights runs/legal_notice_v2_experiment_50/weights/best.pt --name legal_notice_v2_experiment_50
+.\.venv\Scripts\python.exe main.py review-validation --data "dataset_v3/data.yaml" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --image-size 1280 --thresholds "0.05,0.10,0.15,0.20,0.25,0.30" --name "v3_validation_review_repeat"
 ```
 
 Use the report's recommended threshold only after reviewing its false positives
-and misses. This command uses `val` only; it does not load or evaluate `test`.
+and misses. The JSON includes per-newspaper metrics at every threshold plus a
+macro recommendation that gives each newspaper equal weight. Inference runs
+once at the minimum requested threshold and higher thresholds filter those
+predictions. This command uses `val` only; it does not load or evaluate `test`.
+Every named output run must be unique, so change `--name` when repeating it.
+
+## V3 New-Date Testing Reference
+
+The validation-selected v3 candidate and its frozen evaluation settings are:
+
+```text
+Weights:    runs/legal_notice_v3_controlled_50/weights/best.pt
+Confidence: 0.20
+Image size: 1280
+Device:     CPU
+Render DPI: 200
+```
+
+Keep the v2 checkpoint operational until this v3 candidate passes the held-out
+test and new-date review. Use PDFs from dates absent from the training,
+validation, and held-out test splits. A different publication date is not
+necessarily independent if it repeats the same notice from an earlier issue.
+
+### Arrange New PDFs
+
+The input can be one PDF or a directory. Directories are searched recursively,
+so a convenient structure for all four sources is:
+
+```text
+input/new_dates/
+  albayan/
+  alfajr/
+  gulftoday/
+  khaleejtimes/
+```
+
+Put complete issues in these folders rather than selecting only expected notice
+pages. Complete issues also test rejection of editorial pages, ordinary ads,
+name changes, and lost-document notices.
+
+### Recommended Confidence: 0.20
+
+Run this first for normal new-date testing:
+
+```powershell
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.20 --name "v3_new_dates_conf020"
+```
+
+To process only one PDF, replace the input directory with its path:
+
+```powershell
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates/alfajr/alfajr_2026-09-10.pdf" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.20 --name "v3_alfajr_20260910_conf020"
+```
+
+### Exploratory Confidence Comparison
+
+Use separate output names to compare lower and higher confidence settings on
+new-date PDFs. The `0.20` result is the recommended run above. Confidence `0.10`
+favors recall and normally produces more false positives. Confidence `0.30`
+favors precision and may miss real notices.
+
+```powershell
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.10 --name "v3_new_dates_conf010"
+```
+
+```powershell
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.15 --name "v3_new_dates_conf015"
+```
+
+```powershell
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.30 --name "v3_new_dates_conf030"
+```
+
+These confidence runs are exploratory. Keep `0.20` as the frozen setting for
+formal evaluation unless a new threshold is selected using a separate
+validation set. Do not tune the threshold on the held-out test split.
+
+### Detection Outputs
+
+Each run is saved under `output/legal_notices/<name>/` and contains:
+
+- `rendered/`: PDF pages rendered at the requested DPI.
+- `pages/`: an annotated image and notice crops for each rendered page.
+- `detections.json`: confidence scores, pixel bounding boxes, and crop paths.
+
+The command refuses to overwrite an existing named run. Change `--name` for
+each date, source, confidence, or repeat. Omitting `--name` creates a unique
+timestamped run automatically.
+
+### Manual Review Checklist
+
+For each newspaper and date, review the annotated pages and crops for:
+
+- Missed legal notices, especially small or low-contrast notices.
+- False positives on editorial content, ordinary ads, private name changes,
+  lost documents, passports, share certificates, recalls, and tenders.
+- Boxes that omit headings, tables, signatures, or footer text.
+- Adjacent notices incorrectly merged into one box.
+- One complete notice incorrectly split into several boxes.
+- Large Al Bayan panels that are fragmented or overlap another panel.
+- Repeated notices that also appear in training or evaluation issues.
+
+Normal detection on unannotated PDFs is useful for visual acceptance testing,
+but it cannot calculate trustworthy precision and recall. Fully annotate a
+separate representative batch when numerical new-date metrics are required.
+
+### Held-Out Test
+
+After the model, confidence, and image size are frozen, evaluate the existing
+untouched `dataset_v3` test split once:
+
+```powershell
+.\.venv\Scripts\python.exe main.py evaluate --data "dataset_v3/data.yaml" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --image-size 1280 --batch 1 --split test
+```
+
+Record this result as the final held-out measurement. If the model or threshold
+is changed in response to the result, the same split is no longer an independent
+test for the changed system; use a new held-out set. `evaluate` reports standard
+YOLO metrics across its confidence curve; use the frozen `0.20` threshold for
+the separate operational PDF review described above.
 
 ## Detect Legal Notices
 
 Only a checkpoint trained with exactly the `legal_notice` class can run this
-command:
+command. The general form is:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py detect --input input --weights runs/legal_notice/weights/best.pt
+.\.venv\Scripts\python.exe main.py detect --input input --weights runs/legal_notice/weights/best.pt --confidence 0.25
 ```
 
 The command saves annotated pages, an image crop per notice, and a

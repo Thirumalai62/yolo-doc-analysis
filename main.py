@@ -761,17 +761,23 @@ def run_review_validation(args: argparse.Namespace) -> None:
         image_path: parse_yolo_labels(str(label_path), label_path.read_text(encoding="utf-8"))
         for image_path, label_path in pages
     }
-    predictions_by_threshold: dict[float, dict[Path, list[tuple[float, float, float, float, float]]]] = {}
-    for threshold in thresholds:
-        results = model.predict([str(image_path) for image_path, _ in pages], conf=threshold, imgsz=args.image_size, device="cpu", verbose=False)
-        predictions_by_threshold[threshold] = {
-            image_path: [(*box.xywhn[0].tolist(), float(box.conf[0])) for box in result.boxes]
-            for (image_path, _), result in zip(pages, results)
+    results = model.predict([str(image_path) for image_path, _ in pages], conf=min(thresholds), imgsz=args.image_size, device="cpu", verbose=False)
+    minimum_threshold_predictions = {
+        image_path: [(*box.xywhn[0].tolist(), float(box.conf[0])) for box in result.boxes]
+        for (image_path, _), result in zip(pages, results)
+    }
+    predictions_by_threshold = {
+        threshold: {
+            image_path: [box for box in predictions if box[4] >= threshold]
+            for image_path, predictions in minimum_threshold_predictions.items()
         }
+        for threshold in thresholds
+    }
 
     summaries: dict[str, dict[str, float | int]] = {}
     for threshold, by_image in predictions_by_threshold.items():
         true_positive = false_positive = false_negative = boundary_issues = 0
+        threshold_newspapers: dict[str, dict[str, int]] = {}
         for image_path, _ in pages:
             predictions = [box[:4] for box in by_image[image_path]]
             matches, unmatched_predictions, unmatched_targets = match_boxes(predictions, targets_by_image[image_path])
@@ -779,12 +785,29 @@ def run_review_validation(args: argparse.Namespace) -> None:
             false_positive += len(unmatched_predictions)
             false_negative += len(unmatched_targets)
             boundary_issues += sum(iou < 0.75 for _, _, iou in matches)
+            newspaper = image_path.name.split("_")[0]
+            newspaper_totals = threshold_newspapers.setdefault(newspaper, {"pages": 0, "targets": 0, "true_positives": 0, "false_positives": 0, "false_negatives": 0, "boundary_issues": 0})
+            newspaper_totals["pages"] += 1
+            newspaper_totals["targets"] += len(targets_by_image[image_path])
+            newspaper_totals["true_positives"] += len(matches)
+            newspaper_totals["false_positives"] += len(unmatched_predictions)
+            newspaper_totals["false_negatives"] += len(unmatched_targets)
+            newspaper_totals["boundary_issues"] += sum(iou < 0.75 for _, _, iou in matches)
+        newspaper_metrics: dict[str, dict[str, float | int]] = {}
+        for newspaper, totals in threshold_newspapers.items():
+            newspaper_precision = totals["true_positives"] / (totals["true_positives"] + totals["false_positives"]) if totals["true_positives"] + totals["false_positives"] else 0.0
+            newspaper_recall = totals["true_positives"] / (totals["true_positives"] + totals["false_negatives"]) if totals["true_positives"] + totals["false_negatives"] else 0.0
+            newspaper_f1 = 2 * newspaper_precision * newspaper_recall / (newspaper_precision + newspaper_recall) if newspaper_precision + newspaper_recall else 0.0
+            newspaper_metrics[newspaper] = {**totals, "precision": round(newspaper_precision, 4), "recall": round(newspaper_recall, 4), "f1": round(newspaper_f1, 4)}
         precision = true_positive / (true_positive + false_positive) if true_positive + false_positive else 0.0
         recall = true_positive / (true_positive + false_negative) if true_positive + false_negative else 0.0
         f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-        summaries[f"{threshold:.3f}"] = {"threshold": threshold, "true_positives": true_positive, "false_positives": false_positive, "false_negatives": false_negative, "boundary_issues": boundary_issues, "precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4)}
+        macro_f1 = sum(metrics["f1"] for metrics in newspaper_metrics.values()) / len(newspaper_metrics)
+        summaries[f"{threshold:.3f}"] = {"threshold": threshold, "true_positives": true_positive, "false_positives": false_positive, "false_negatives": false_negative, "boundary_issues": boundary_issues, "precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4), "macro_f1": round(macro_f1, 4), "newspapers": newspaper_metrics}
     recommended_key = max(summaries, key=lambda key: (summaries[key]["f1"], summaries[key]["precision"]))
     recommended_threshold = float(summaries[recommended_key]["threshold"])
+    recommended_macro_key = max(summaries, key=lambda key: (summaries[key]["macro_f1"], summaries[key]["precision"]))
+    recommended_macro_threshold = float(summaries[recommended_macro_key]["threshold"])
 
     output_root = create_run_directory("validation_review", args.name)
     pages_report: list[dict[str, object]] = []
@@ -819,11 +842,12 @@ def run_review_validation(args: argparse.Namespace) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         overlay.save(destination)
         pages_report.append({"image": str(image_path.relative_to(PROJECT_ROOT)), "newspaper": newspaper, "overlay": str(destination.relative_to(PROJECT_ROOT)), "targets": len(targets), "predictions": len(predictions), "matches": len(matches), "false_positive_boxes": [predictions_with_confidence[index] for index in unmatched_predictions], "missed_target_boxes": [targets[index] for index in unmatched_targets], "boundary_issue_matches": [{"prediction": prediction_index, "target": target_index, "iou": round(iou, 4)} for prediction_index, target_index, iou in matches if iou < 0.75]})
-    report = {"weights": str(project_path(args.weights).relative_to(PROJECT_ROOT)), "split": "val", "matching_iou": 0.5, "boundary_issue_iou_below": 0.75, "recommended_threshold": recommended_threshold, "thresholds": summaries, "newspapers": newspapers, "pages": pages_report, "legend": {"blue": "matched box, IoU >= 0.75", "orange": "matched box with boundary issue", "red": "false-positive prediction", "magenta": "missed ground-truth notice"}}
+    report = {"weights": str(project_path(args.weights).relative_to(PROJECT_ROOT)), "split": "val", "matching_iou": 0.5, "boundary_issue_iou_below": 0.75, "recommended_threshold": recommended_threshold, "recommended_macro_threshold": recommended_macro_threshold, "thresholds": summaries, "newspapers": newspapers, "pages": pages_report, "legend": {"blue": "matched box, IoU >= 0.75", "orange": "matched box with boundary issue", "red": "false-positive prediction", "magenta": "missed ground-truth notice"}}
     report_path = output_root / "validation_report.json"
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Validation review complete: {output_root.relative_to(PROJECT_ROOT)}")
     print(f"Recommended confidence threshold: {recommended_threshold:.3f}")
+    print(f"Recommended macro confidence threshold: {recommended_macro_threshold:.3f}")
     print(f"Report: {report_path.relative_to(PROJECT_ROOT)}")
 
 
@@ -831,10 +855,23 @@ def run_train(args: argparse.Namespace) -> None:
     data_path = project_path(args.data)
     validate_dataset(data_path)
     weights = project_path(args.weights) if args.weights else layout_model_path()
+    run_dir = RUNS_DIR / args.name
+    if run_dir.exists():
+        raise SystemExit(f"Training run already exists: {run_dir}. Use a new --name to preserve prior checkpoints.")
+    if args.learning_rate <= 0 or not 0 <= args.momentum <= 1 or args.warmup_bias_lr < 0:
+        raise SystemExit("Training rates must use --learning-rate > 0, --momentum between 0 and 1, and --warmup-bias-lr >= 0.")
+    if any(value < 0 for value in (args.mosaic, args.scale, args.translate, args.fliplr)) or args.mosaic > 1 or args.translate > 1 or args.fliplr > 1:
+        raise SystemExit("Augmentation probabilities must be non-negative; mosaic, translate, and fliplr cannot exceed 1.")
+    if args.close_mosaic < 0 or args.save_period == 0 or args.save_period < -1:
+        raise SystemExit("Use --close-mosaic >= 0 and --save-period -1 or a positive epoch interval.")
     model = load_yolo(weights)
     results = model.train(
         data=str(data_path), epochs=args.epochs, imgsz=args.image_size, batch=args.batch,
-        device="cpu", workers=0, project=str(RUNS_DIR), name=args.name, exist_ok=True,
+        device="cpu", workers=0, project=str(RUNS_DIR), name=args.name, exist_ok=False,
+        optimizer=args.optimizer, lr0=args.learning_rate, momentum=args.momentum,
+        warmup_bias_lr=args.warmup_bias_lr, mosaic=args.mosaic, scale=args.scale,
+        translate=args.translate, fliplr=args.fliplr, close_mosaic=args.close_mosaic,
+        save_period=args.save_period,
     )
     print(f"Training complete. Results: {results.save_dir}")
     print("Use the generated weights/best.pt with the detect command.")
@@ -914,6 +951,16 @@ def create_parser() -> argparse.ArgumentParser:
     train.add_argument("--image-size", type=int, default=1280)
     train.add_argument("--batch", type=int, default=1)
     train.add_argument("--name", default="legal_notice")
+    train.add_argument("--optimizer", default="auto", choices=("auto", "SGD", "Adam", "AdamW", "NAdam", "RAdam", "RMSProp"))
+    train.add_argument("--learning-rate", type=float, default=0.01, help="Initial optimizer learning rate (default: 0.01)")
+    train.add_argument("--momentum", type=float, default=0.937, help="SGD momentum or Adam beta1 (default: 0.937)")
+    train.add_argument("--warmup-bias-lr", type=float, default=0.1, help="Initial bias learning rate during warmup (default: 0.1)")
+    train.add_argument("--mosaic", type=float, default=1.0, help="Mosaic augmentation probability (default: 1.0)")
+    train.add_argument("--scale", type=float, default=0.5, help="Random scale gain (default: 0.5)")
+    train.add_argument("--translate", type=float, default=0.1, help="Random translation fraction (default: 0.1)")
+    train.add_argument("--fliplr", type=float, default=0.5, help="Horizontal-flip probability (default: 0.5)")
+    train.add_argument("--close-mosaic", type=int, default=10, help="Disable mosaic for the final N epochs (default: 10)")
+    train.add_argument("--save-period", type=int, default=-1, help="Save a checkpoint every N epochs; -1 disables periodic saves")
     train.set_defaults(func=run_train)
 
     evaluate = commands.add_parser("evaluate", help="Evaluate a custom legal-notice checkpoint using CPU")
