@@ -1,0 +1,178 @@
+{
+  "suite": "full_category_development_challenge_v1",
+  "dataset_release": "regression/detector_v6_dataset_manifest.json",
+  "acceptance_confidence": 0.8,
+  "image_size": 1280,
+  "valid_match_iou": 0.5,
+  "excluded_prediction_overlap": 0.5,
+  "unavailable_categories": [
+    {
+      "category": "private_warning_advertisement",
+      "reason": "No confirmed example exists in the 36 eligible development issues; preservation and held-out pages are prohibited."
+    }
+  ],
+  "pages": [
+    {
+      "issue": "albayan_2026-08-21",
+      "page": 27,
+      "newspaper": "albayan",
+      "image": "dataset_v5_corrected/images/val/albayan_2026-08-21_page_0027.png",
+      "label": "dataset_v5_corrected/labels/val/albayan_2026-08-21_page_0027.txt",
+      "width": 2339,
+      "height": 4344,
+      "review": "Full page reviewed: one excluded Ajman vehicle-disposal publication above four valid legal notices.",
+      "excluded": [
+        {
+          "id": "albayan_2026-08-21_p0027_vehicle_disposal_001",
+          "category": "vehicle_auction_or_disposal",
+          "reason": "Ajman Municipality publication listing impounded vehicles for disposal",
+          "xyxy": [65, 328, 2273, 3290]
+        }
+      ]
+    },
+    {
+      "issue": "khaleejtimes_2026-08-20",
+      "page": 5,
+      "newspaper": "khaleejtimes",
+      "image": "dataset_v5_corrected/images/val/khaleejtimes_2026-08-20_page_0005.png",
+      "label": "dataset_v5_corrected/labels/val/khaleejtimes_2026-08-20_page_0005.txt",
+      "width": 2339,
+      "height": 4149,
+      "review": "Full page reviewed: the Toyota and Lexus safety-recall panel is excluded and there are no valid legal notices.",
+      "excluded": [
+        {
+          "id": "khaleejtimes_2026-08-20_p0005_recall_001",
+          "category": "product_or_vehicle_recall",
+          "reason": "Toyota and Lexus transmission ECU safety recall",
+          "xyxy": [1165, 2824, 2157, 3900]
+        }
+      ]
+    },
+    {
+      "issue": "khaleejtimes_2026-08-19",
+      "page": 5,
+      "newspaper": "khaleejtimes",
+      "image": "dataset_v5_corrected/images/val/khaleejtimes_2026-08-19_page_0005.png",
+      "label": "dataset_v5_corrected/labels/val/khaleejtimes_2026-08-19_page_0005.txt",
+      "width": 2339,
+      "height": 4149,
+      "review": "Full page reviewed: the global e-tender panel is excluded and there are no valid legal notices.",
+      "excluded": [
+        {
+          "id": "khaleejtimes_2026-08-19_p0005_tender_001",
+          "category": "procurement_tender_or_rfp",
+          "reason": "Urja Bharat invitation for global e-tenders",
+          "xyxy": [790, 3207, 1462, 4025]
+        }
+      ]
+    },
+    {
+      "issue": "khaleejtimes_2026-08-20",
+      "page": 14,
+      "newspaper": "khaleejtimes",
+      "image": "dataset_v5_corrected/images/val/khaleejtimes_2026-08-20_page_0014.png",
+      "label": "dataset_v5_corrected/labels/val/khaleejtimes_2026-08-20_page_0014.txt",
+      "width": 2339,
+      "height": 4149,
+      "review": "Full page reviewed: recruitment and ordinary advertising are excluded while three liquidation notices are valid.",
+      "excluded": [
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_recruitment_001",
+          "category": "recruitment",
+          "reason": "Civil engineer job vacancy",
+          "xyxy": [100, 2940, 392, 4035]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_advertisement_001",
+          "category": "ordinary_advertisement",
+          "reason": "Classified-ad booking advertisement",
+          "xyxy": [400, 2932, 633, 3432]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_advertisement_002",
+          "category": "ordinary_advertisement",
+          "reason": "Scaffolding material sale advertisement",
+          "xyxy": [661, 2928, 944, 3435]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_advertisement_003",
+          "category": "ordinary_advertisement",
+          "reason": "Newspaper mandatory-notice advertising promotion",
+          "xyxy": [398, 3463, 1548, 3900]
+        }
+      ]
+    },
+    {
+      "issue": "albayan_2026-08-11",
+      "page": 2,
+      "newspaper": "albayan",
+      "image": "dataset_v5_corrected/images/val/albayan_2026-08-11_page_0002.png",
+      "label": "dataset_v5_corrected/labels/val/albayan_2026-08-11_page_0002.txt",
+      "width": 2339,
+      "height": 4344,
+      "review": "Full page reviewed: the boxed condolence news item is excluded and there are no valid legal notices.",
+      "excluded": [
+        {
+          "id": "albayan_2026-08-11_p0002_editorial_001",
+          "category": "unrelated_editorial_or_news",
+          "reason": "Boxed condolence editorial item",
+          "xyxy": [61, 551, 598, 1407]
+        }
+      ]
+    },
+    {
+      "issue": "alfajr_2026-09-03",
+      "page": 16,
+      "newspaper": "alfajr",
+      "image": "dataset_v5_corrected/images/val/alfajr_2026-09-03_page_0016.png",
+      "label": "dataset_v5_corrected/labels/val/alfajr_2026-09-03_page_0016.txt",
+      "width": 2638,
+      "height": 4489,
+      "review": "Full page reviewed: one private name-change panel is excluded and 23 court, authority, and company notices are valid.",
+      "excluded": [
+        {
+          "id": "alfajr_2026-09-03_p0016_name_change_001",
+          "category": "private_personal_name_change",
+          "reason": "Private personal-name change removed by the corrected dataset",
+          "xyxy": [109, 348, 702, 956]
+        }
+      ]
+    },
+    {
+      "issue": "alfajr_2026-09-03",
+      "page": 5,
+      "newspaper": "alfajr",
+      "image": "dataset_v5_corrected/images/val/alfajr_2026-09-03_page_0005.png",
+      "label": "dataset_v5_corrected/labels/val/alfajr_2026-09-03_page_0005.txt",
+      "width": 2638,
+      "height": 4489,
+      "review": "Full page reviewed: four lost-share-certificate panels are excluded and the nearby non-vehicle court auction is valid.",
+      "excluded": [
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_001",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [112, 3896, 699, 4315]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_002",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [718, 3896, 1304, 4315]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_003",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [1327, 3896, 1915, 4315]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_004",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [1936, 3896, 2526, 4315]
+        }
+      ]
+    }
+  ]
+}

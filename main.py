@@ -761,7 +761,11 @@ def run_review_validation(args: argparse.Namespace) -> None:
         image_path: parse_yolo_labels(str(label_path), label_path.read_text(encoding="utf-8"))
         for image_path, label_path in pages
     }
-    results = model.predict([str(image_path) for image_path, _ in pages], conf=min(thresholds), imgsz=args.image_size, device="cpu", verbose=False)
+    # Match detect's one-page preprocessing; mixed-shape batches change padding and scores.
+    results = [
+        model.predict(str(image_path), conf=min(thresholds), imgsz=args.image_size, device="cpu", verbose=False)[0]
+        for image_path, _ in pages
+    ]
     minimum_threshold_predictions = {
         image_path: [(*box.xywhn[0].tolist(), float(box.conf[0])) for box in result.boxes]
         for (image_path, _), result in zip(pages, results)

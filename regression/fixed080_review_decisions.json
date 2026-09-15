@@ -1,0 +1,179 @@
+{
+  "baseline_predictions": "output/regression_audit/v3_vs_v4_conf080_sep09_10/raw_v3.json",
+  "acceptance_confidence": 0.8,
+  "default_classification": "valid",
+  "classification_overrides": [
+    {
+      "issue": "albayan_2026-09-09",
+      "page": 3,
+      "reference_xyxy": [50.48, 443.39, 602.29, 1257.88],
+      "classification": "excluded",
+      "reason": "editorial condolence item"
+    },
+    {
+      "issue": "albayan_2026-09-09",
+      "page": 32,
+      "reference_xyxy": [1737.23, 3463.97, 2279.5, 4211.85],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "albayan_2026-09-09",
+      "page": 32,
+      "reference_xyxy": [1176.06, 3469.26, 1720.74, 4211.89],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "albayan_2026-09-09",
+      "page": 32,
+      "reference_xyxy": [45.82, 1161.97, 1278.37, 4344.0],
+      "classification": "excluded",
+      "reason": "vehicle auction or disposal"
+    },
+    {
+      "issue": "alfajr_2026-09-10",
+      "page": 10,
+      "reference_xyxy": [1628.99, 341.3, 2405.33, 860.07],
+      "classification": "excluded",
+      "reason": "editorial forum sidebar"
+    },
+    {
+      "issue": "alfajr_2026-09-10",
+      "page": 12,
+      "reference_xyxy": [1934.65, 3020.81, 2522.32, 3445.9],
+      "classification": "excluded",
+      "reason": "lost share certificates"
+    },
+    {
+      "issue": "alfajr_2026-09-10",
+      "page": 12,
+      "reference_xyxy": [58.75, 3495.21, 705.75, 4338.44],
+      "classification": "excluded",
+      "reason": "private warning advertisement"
+    },
+    {
+      "issue": "gulftoday_2026-09-09",
+      "page": 7,
+      "reference_xyxy": [70.36, 1551.93, 1178.38, 4022.0],
+      "classification": "excluded",
+      "reason": "vehicle auction or disposal"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 7,
+      "reference_xyxy": [69.15, 1500.99, 1151.5, 4022.0],
+      "classification": "excluded",
+      "reason": "vehicle auction or disposal"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 13,
+      "reference_xyxy": [810.76, 2426.51, 1556.54, 2803.48],
+      "classification": "excluded",
+      "reason": "scholarship advertisement"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 13,
+      "reference_xyxy": [794.49, 2812.72, 1573.49, 3971.77],
+      "classification": "uncertain",
+      "reason": "private trade-name demand with unclear formal-notice status"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 13,
+      "reference_xyxy": [1560.5, 2801.71, 2335.18, 3971.42],
+      "classification": "uncertain",
+      "reason": "private trademark demand with unclear formal-notice status"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 14,
+      "reference_xyxy": [79.0, 2416.17, 809.56, 2790.65],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 14,
+      "reference_xyxy": [75.16, 2799.15, 819.56, 3167.97],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 14,
+      "reference_xyxy": [75.72, 3173.07, 823.53, 3546.96],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 14,
+      "reference_xyxy": [75.02, 3557.31, 817.67, 3924.0],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "gulftoday_2026-09-10",
+      "page": 14,
+      "reference_xyxy": [817.72, 3557.09, 1537.56, 3926.54],
+      "classification": "excluded",
+      "reason": "private personal-name change"
+    },
+    {
+      "issue": "khaleejtimes_2026-09-09",
+      "page": 11,
+      "reference_xyxy": [1524.46, 3661.22, 2252.96, 4048.12],
+      "classification": "excluded",
+      "reason": "procurement tender"
+    },
+    {
+      "issue": "khaleejtimes_2026-09-10",
+      "page": 12,
+      "reference_xyxy": [1624.68, 3503.51, 2232.96, 4043.21],
+      "classification": "excluded",
+      "reason": "vehicle sale or disposal"
+    }
+  ],
+  "critical_boundaries": [
+    {
+      "issue": "albayan_2026-09-09",
+      "page": 33,
+      "reference_xyxy": [46.36, 235.98, 1152.93, 4344.0],
+      "description": "left full-column registration and licensing table"
+    },
+    {
+      "issue": "albayan_2026-09-09",
+      "page": 33,
+      "reference_xyxy": [1147.18, 190.76, 2277.68, 4344.0],
+      "description": "right full-column registration and licensing table"
+    },
+    {
+      "issue": "albayan_2026-09-10",
+      "page": 29,
+      "reference_xyxy": [45.06, 239.29, 1162.03, 4217.9],
+      "description": "left full-column registration and licensing table"
+    },
+    {
+      "issue": "albayan_2026-09-10",
+      "page": 29,
+      "reference_xyxy": [1149.62, 198.64, 2268.2, 4344.0],
+      "description": "right full-column registration and licensing table"
+    }
+  ],
+  "boundary_requirements": {
+    "minimum_iou": 0.85,
+    "minimum_area_ratio": 0.95,
+    "maximum_area_ratio": 1.1,
+    "maximum_top_inset_normalized": 0.02,
+    "maximum_bottom_inset_normalized": 0.02
+  },
+  "expected_review_counts": {
+    "valid": 271,
+    "excluded": 17,
+    "uncertain": 2,
+    "critical_boundaries": 4
+  }
+}

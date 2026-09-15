@@ -24,6 +24,8 @@ __pycache__/
 !/dataset/labels/test/.gitkeep
 /dataset_v2/
 /dataset_v3/
+/dataset_v4/
+/dataset_v5_corrected/
 /output/*
 !/output/.gitkeep
 /expected-output/*

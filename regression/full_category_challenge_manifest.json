@@ -1,0 +1,946 @@
+{
+  "suite": "full_category_development_challenge_v1",
+  "created_at_utc": "2026-09-12T11:50:32.319550+00:00",
+  "development_only": true,
+  "acceptance_confidence": 0.8,
+  "image_size": 1280,
+  "inference": "one page per predict call on CPU",
+  "valid_match_iou": 0.5,
+  "excluded_prediction_overlap": 0.5,
+  "dataset_release": "regression/detector_v6_dataset_manifest.json",
+  "dataset_release_sha256": "a123aabc8cc264736c7887ee906460c1d5f939747114833870482b0cac486ae4",
+  "dataset_sha256": "639a294efc01ef5b360a92f9aef55d3c41d6bb469507dab48cecf895b5225c5b",
+  "decisions": "regression/full_category_challenge_decisions.json",
+  "decisions_sha256": "1d32a4c9f5eb8a39d1c9af1743ad1829158f4488072694dc3575769227d939a0",
+  "strict_gates": {
+    "valid_missed": 0,
+    "excluded_accepted_regions": 0,
+    "unreviewed_accepted": 0
+  },
+  "reference_counts": {
+    "lost_documents_or_share_certificates": 4,
+    "ordinary_advertisement": 3,
+    "private_personal_name_change": 1,
+    "procurement_tender_or_rfp": 1,
+    "product_or_vehicle_recall": 1,
+    "recruitment": 1,
+    "unrelated_editorial_or_news": 1,
+    "valid_legal_notice": 31,
+    "vehicle_auction_or_disposal": 1
+  },
+  "unavailable_categories": [
+    {
+      "category": "private_warning_advertisement",
+      "reason": "No confirmed example exists in the 36 eligible development issues; preservation and held-out pages are prohibited."
+    }
+  ],
+  "notes": [
+    "These validation pages are outside training but are not an unbiased final test.",
+    "Valid references come from the frozen corrected YOLO labels.",
+    "Excluded regions were visually reviewed over complete pages.",
+    "A detection is attributed to an exclusion when at least half of the prediction lies inside that reviewed region."
+  ],
+  "pages": [
+    {
+      "issue": "albayan_2026-08-21",
+      "page": 27,
+      "newspaper": "albayan",
+      "image": "dataset_v5_corrected/images/val/albayan_2026-08-21_page_0027.png",
+      "label": "dataset_v5_corrected/labels/val/albayan_2026-08-21_page_0027.txt",
+      "width": 2339,
+      "height": 4344,
+      "review": "Full page reviewed: one excluded Ajman vehicle-disposal publication above four valid legal notices.",
+      "excluded": [
+        {
+          "id": "albayan_2026-08-21_p0027_vehicle_disposal_001",
+          "category": "vehicle_auction_or_disposal",
+          "reason": "Ajman Municipality publication listing impounded vehicles for disposal",
+          "xyxy": [
+            65,
+            328,
+            2273,
+            3290
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.499786,
+            0.416436,
+            0.943993,
+            0.68186
+          ]
+        }
+      ],
+      "image_sha256": "2fd389c8ea3eb242243c0be01b8d6e169fbde1c196e7243dac20238f66aa7c42",
+      "label_sha256": "30ea047a5630136d8ba19e2ad415fe6c5d0a1ff04b56e72cad7861e01052a3fe",
+      "valid": [
+        {
+          "id": "albayan_2026-08-21_p0027_valid_001",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.200941,
+            0.82355,
+            0.350577,
+            0.09047
+          ],
+          "xyxy": [
+            60.0,
+            3381.0,
+            880.0,
+            3774.0
+          ]
+        },
+        {
+          "id": "albayan_2026-08-21_p0027_valid_002",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.202223,
+            0.92035,
+            0.350577,
+            0.0907
+          ],
+          "xyxy": [
+            63.0,
+            3801.0,
+            883.0,
+            4195.0
+          ]
+        },
+        {
+          "id": "albayan_2026-08-21_p0027_valid_003",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.561779,
+            0.824471,
+            0.350577,
+            0.09047
+          ],
+          "xyxy": [
+            904.0,
+            3385.0,
+            1724.0,
+            3778.0
+          ]
+        },
+        {
+          "id": "albayan_2026-08-21_p0027_valid_004",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.860197,
+            0.877993,
+            0.231723,
+            0.176335
+          ],
+          "xyxy": [
+            1741.0,
+            3431.0,
+            2283.0,
+            4197.0
+          ]
+        }
+      ]
+    },
+    {
+      "issue": "khaleejtimes_2026-08-20",
+      "page": 5,
+      "newspaper": "khaleejtimes",
+      "image": "dataset_v5_corrected/images/val/khaleejtimes_2026-08-20_page_0005.png",
+      "label": "dataset_v5_corrected/labels/val/khaleejtimes_2026-08-20_page_0005.txt",
+      "width": 2339,
+      "height": 4149,
+      "review": "Full page reviewed: the Toyota and Lexus safety-recall panel is excluded and there are no valid legal notices.",
+      "excluded": [
+        {
+          "id": "khaleejtimes_2026-08-20_p0005_recall_001",
+          "category": "product_or_vehicle_recall",
+          "reason": "Toyota and Lexus transmission ECU safety recall",
+          "xyxy": [
+            1165,
+            2824,
+            2157,
+            3900
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.710133,
+            0.810316,
+            0.424113,
+            0.25934
+          ]
+        }
+      ],
+      "image_sha256": "3727b7840d49e5a99d871eb18dd524ea138349c1244728b4d4a115614ceb19e5",
+      "label_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "valid": []
+    },
+    {
+      "issue": "khaleejtimes_2026-08-19",
+      "page": 5,
+      "newspaper": "khaleejtimes",
+      "image": "dataset_v5_corrected/images/val/khaleejtimes_2026-08-19_page_0005.png",
+      "label": "dataset_v5_corrected/labels/val/khaleejtimes_2026-08-19_page_0005.txt",
+      "width": 2339,
+      "height": 4149,
+      "review": "Full page reviewed: the global e-tender panel is excluded and there are no valid legal notices.",
+      "excluded": [
+        {
+          "id": "khaleejtimes_2026-08-19_p0005_tender_001",
+          "category": "procurement_tender_or_rfp",
+          "reason": "Urja Bharat invitation for global e-tenders",
+          "xyxy": [
+            790,
+            3207,
+            1462,
+            4025
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.481402,
+            0.871535,
+            0.287302,
+            0.197156
+          ]
+        }
+      ],
+      "image_sha256": "ecfe1a8ec8f910a34288c79897cdffe260adc6dac2e5da958524bd78ae992918",
+      "label_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "valid": []
+    },
+    {
+      "issue": "khaleejtimes_2026-08-20",
+      "page": 14,
+      "newspaper": "khaleejtimes",
+      "image": "dataset_v5_corrected/images/val/khaleejtimes_2026-08-20_page_0014.png",
+      "label": "dataset_v5_corrected/labels/val/khaleejtimes_2026-08-20_page_0014.txt",
+      "width": 2339,
+      "height": 4149,
+      "review": "Full page reviewed: recruitment and ordinary advertising are excluded while three liquidation notices are valid.",
+      "excluded": [
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_recruitment_001",
+          "category": "recruitment",
+          "reason": "Civil engineer job vacancy",
+          "xyxy": [
+            100,
+            2940,
+            392,
+            4035
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.105173,
+            0.840564,
+            0.12484,
+            0.263919
+          ]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_advertisement_001",
+          "category": "ordinary_advertisement",
+          "reason": "Classified-ad booking advertisement",
+          "xyxy": [
+            400,
+            2932,
+            633,
+            3432
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.220821,
+            0.766932,
+            0.099615,
+            0.120511
+          ]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_advertisement_002",
+          "category": "ordinary_advertisement",
+          "reason": "Scaffolding material sale advertisement",
+          "xyxy": [
+            661,
+            2928,
+            944,
+            3435
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.343095,
+            0.766811,
+            0.120992,
+            0.122198
+          ]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_advertisement_003",
+          "category": "ordinary_advertisement",
+          "reason": "Newspaper mandatory-notice advertising promotion",
+          "xyxy": [
+            398,
+            3463,
+            1548,
+            3900
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.41599,
+            0.887322,
+            0.491663,
+            0.105327
+          ]
+        }
+      ],
+      "image_sha256": "f37fa38fa4b1cce871eba000763e20b5003dd73e232f3a8beab7b2ca18c46bba",
+      "label_sha256": "8c07d003f39d669b9f5595a072ef336cd4f0327a12560a774d833c66881041f2",
+      "valid": [
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_valid_001",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.556007,
+            0.796216,
+            0.262933,
+            0.106773
+          ],
+          "xyxy": [
+            993.0,
+            3082.0,
+            1608.0,
+            3525.0
+          ]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_valid_002",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.823856,
+            0.796457,
+            0.26336,
+            0.106773
+          ],
+          "xyxy": [
+            1619.0,
+            3083.0,
+            2235.0,
+            3526.0
+          ]
+        },
+        {
+          "id": "khaleejtimes_2026-08-20_p0014_valid_003",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.823429,
+            0.909978,
+            0.26336,
+            0.090865
+          ],
+          "xyxy": [
+            1618.0,
+            3587.0,
+            2234.0,
+            3964.0
+          ]
+        }
+      ]
+    },
+    {
+      "issue": "albayan_2026-08-11",
+      "page": 2,
+      "newspaper": "albayan",
+      "image": "dataset_v5_corrected/images/val/albayan_2026-08-11_page_0002.png",
+      "label": "dataset_v5_corrected/labels/val/albayan_2026-08-11_page_0002.txt",
+      "width": 2339,
+      "height": 4344,
+      "review": "Full page reviewed: the boxed condolence news item is excluded and there are no valid legal notices.",
+      "excluded": [
+        {
+          "id": "albayan_2026-08-11_p0002_editorial_001",
+          "category": "unrelated_editorial_or_news",
+          "reason": "Boxed condolence editorial item",
+          "xyxy": [
+            61,
+            551,
+            598,
+            1407
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.140872,
+            0.225368,
+            0.229585,
+            0.197053
+          ]
+        }
+      ],
+      "image_sha256": "40a215bba2d80068af334647d59e7017babe2e9ee4674e88c29357b84bbb5b74",
+      "label_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "valid": []
+    },
+    {
+      "issue": "alfajr_2026-09-03",
+      "page": 16,
+      "newspaper": "alfajr",
+      "image": "dataset_v5_corrected/images/val/alfajr_2026-09-03_page_0016.png",
+      "label": "dataset_v5_corrected/labels/val/alfajr_2026-09-03_page_0016.txt",
+      "width": 2638,
+      "height": 4489,
+      "review": "Full page reviewed: one private name-change panel is excluded and 23 court, authority, and company notices are valid.",
+      "excluded": [
+        {
+          "id": "alfajr_2026-09-03_p0016_name_change_001",
+          "category": "private_personal_name_change",
+          "reason": "Private personal-name change removed by the corrected dataset",
+          "xyxy": [
+            109,
+            348,
+            702,
+            956
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.153715,
+            0.145244,
+            0.224792,
+            0.135442
+          ]
+        }
+      ],
+      "image_sha256": "1b618b972f72e70f92c6edf93398ed940758d9208d4612a7409965cf2f697d77",
+      "label_sha256": "02899347745b7af8f8227b638d9678469d93e39bb4aeeffefc1331e333a02e1e",
+      "valid": [
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_001",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.153146,
+            0.291713,
+            0.223654,
+            0.141011
+          ],
+          "xyxy": [
+            109.0,
+            993.0,
+            699.0,
+            1626.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_002",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.385519,
+            0.146024,
+            0.220622,
+            0.13611
+          ],
+          "xyxy": [
+            726.0,
+            350.0,
+            1308.0,
+            961.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_003",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.387415,
+            0.292604,
+            0.224412,
+            0.142793
+          ],
+          "xyxy": [
+            726.0,
+            993.0,
+            1318.0,
+            1634.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_004",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.618082,
+            0.146915,
+            0.226308,
+            0.137893
+          ],
+          "xyxy": [
+            1332.0,
+            350.0,
+            1929.0,
+            969.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_005",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.617703,
+            0.290822,
+            0.219484,
+            0.139229
+          ],
+          "xyxy": [
+            1340.0,
+            993.0,
+            1919.0,
+            1618.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_006",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.848749,
+            0.293272,
+            0.226687,
+            0.139229
+          ],
+          "xyxy": [
+            1940.0,
+            1004.0,
+            2538.0,
+            1629.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_007",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.849697,
+            0.147583,
+            0.224792,
+            0.139229
+          ],
+          "xyxy": [
+            1945.0,
+            350.0,
+            2538.0,
+            975.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_008",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.153525,
+            0.442749,
+            0.225929,
+            0.139229
+          ],
+          "xyxy": [
+            107.0,
+            1675.0,
+            703.0,
+            2300.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_009",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.15144,
+            0.592448,
+            0.230099,
+            0.13611
+          ],
+          "xyxy": [
+            96.0,
+            2354.0,
+            703.0,
+            2965.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_010",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.38514,
+            0.442415,
+            0.220622,
+            0.139898
+          ],
+          "xyxy": [
+            725.0,
+            1672.0,
+            1307.0,
+            2300.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_011",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.387036,
+            0.592337,
+            0.222138,
+            0.13767
+          ],
+          "xyxy": [
+            728.0,
+            2350.0,
+            1314.0,
+            2968.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_012",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.616566,
+            0.44364,
+            0.221759,
+            0.139675
+          ],
+          "xyxy": [
+            1334.0,
+            1678.0,
+            1919.0,
+            2305.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_013",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.615618,
+            0.594564,
+            0.217589,
+            0.139898
+          ],
+          "xyxy": [
+            1337.0,
+            2355.0,
+            1911.0,
+            2983.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_014",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.849128,
+            0.442972,
+            0.223654,
+            0.141902
+          ],
+          "xyxy": [
+            1945.0,
+            1670.0,
+            2535.0,
+            2307.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_015",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.846096,
+            0.59423,
+            0.227445,
+            0.137893
+          ],
+          "xyxy": [
+            1932.0,
+            2358.0,
+            2532.0,
+            2977.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_016",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.150872,
+            0.744932,
+            0.228203,
+            0.142571
+          ],
+          "xyxy": [
+            97.0,
+            3024.0,
+            699.0,
+            3664.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_017",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.155042,
+            0.892738,
+            0.224412,
+            0.139675
+          ],
+          "xyxy": [
+            113.0,
+            3694.0,
+            705.0,
+            4321.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_018",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.384003,
+            0.744932,
+            0.223654,
+            0.139452
+          ],
+          "xyxy": [
+            718.0,
+            3031.0,
+            1308.0,
+            3657.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_019",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.384572,
+            0.891401,
+            0.222517,
+            0.142348
+          ],
+          "xyxy": [
+            721.0,
+            3682.0,
+            1308.0,
+            4321.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_020",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.615618,
+            0.74393,
+            0.22138,
+            0.137447
+          ],
+          "xyxy": [
+            1332.0,
+            3031.0,
+            1916.0,
+            3648.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_021",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.616187,
+            0.894186,
+            0.220243,
+            0.145244
+          ],
+          "xyxy": [
+            1335.0,
+            3688.0,
+            1916.0,
+            4340.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_022",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.847233,
+            0.742816,
+            0.223654,
+            0.142348
+          ],
+          "xyxy": [
+            1940.0,
+            3015.0,
+            2530.0,
+            3654.0
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0016_valid_023",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.84856,
+            0.89207,
+            0.223275,
+            0.141011
+          ],
+          "xyxy": [
+            1944.0,
+            3688.0,
+            2533.0,
+            4321.0
+          ]
+        }
+      ]
+    },
+    {
+      "issue": "alfajr_2026-09-03",
+      "page": 5,
+      "newspaper": "alfajr",
+      "image": "dataset_v5_corrected/images/val/alfajr_2026-09-03_page_0005.png",
+      "label": "dataset_v5_corrected/labels/val/alfajr_2026-09-03_page_0005.txt",
+      "width": 2638,
+      "height": 4489,
+      "review": "Full page reviewed: four lost-share-certificate panels are excluded and the nearby non-vehicle court auction is valid.",
+      "excluded": [
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_001",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [
+            112,
+            3896,
+            699,
+            4315
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.153715,
+            0.914569,
+            0.222517,
+            0.093339
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_002",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [
+            718,
+            3896,
+            1304,
+            4315
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.383245,
+            0.914569,
+            0.222138,
+            0.093339
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_003",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [
+            1327,
+            3896,
+            1915,
+            4315
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.614481,
+            0.914569,
+            0.222896,
+            0.093339
+          ]
+        },
+        {
+          "id": "alfajr_2026-09-03_p0005_lost_share_004",
+          "category": "lost_documents_or_share_certificates",
+          "reason": "Lost share certificate notice",
+          "xyxy": [
+            1936,
+            3896,
+            2526,
+            4315
+          ],
+          "classification": "excluded",
+          "xywhn": [
+            0.845716,
+            0.914569,
+            0.223654,
+            0.093339
+          ]
+        }
+      ],
+      "image_sha256": "f2d7ad3d3429938c7dcfaa7b753edbdb0deb0989085196b482f70445b8758c41",
+      "label_sha256": "910a2d3c7a5016130741e12b2de1dc0912a36c430d6094860d2c67de2d275297",
+      "valid": [
+        {
+          "id": "alfajr_2026-09-03_p0005_valid_001",
+          "classification": "valid",
+          "category": "valid_legal_notice",
+          "reason": "reviewed dataset legal-notice label",
+          "xywhn": [
+            0.152578,
+            0.798619,
+            0.226308,
+            0.135888
+          ],
+          "xyxy": [
+            104.0,
+            3280.0,
+            701.0,
+            3890.0
+          ]
+        }
+      ]
+    }
+  ]
+}

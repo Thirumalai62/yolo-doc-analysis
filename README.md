@@ -171,10 +171,85 @@ boxes are missed approved notices.
 
 Use the report's recommended threshold only after reviewing its false positives
 and misses. The JSON includes per-newspaper metrics at every threshold plus a
-macro recommendation that gives each newspaper equal weight. Inference runs
-once at the minimum requested threshold and higher thresholds filter those
-predictions. This command uses `val` only; it does not load or evaluate `test`.
+macro recommendation that gives each newspaper equal weight. Each page is
+inferred separately at the minimum requested threshold to match `detect`;
+higher thresholds filter those predictions. This command uses `val` only; it
+does not load or evaluate `test`.
 Every named output run must be unique, so change `--name` when repeating it.
+
+## Fixed-0.80 Corrective-Candidate Gate
+
+The corrective-candidate workflow uses a reviewed preservation suite from the
+complete September 9-10 issues. It contains 271 valid v3 references, 17
+definite exclusions, two non-gating uncertain references, and four strict Al
+Bayan table-boundary checks. This is a preservation suite, not exhaustive page
+ground truth.
+
+Create the corrected dataset once. The command copies `dataset_v4`, verifies
+the exact four reviewed labels before removing them, deletes stale YOLO caches,
+and refuses to overwrite an existing destination:
+
+```powershell
+.\.venv\Scripts\python.exe regression/prepare_corrected_dataset.py
+.\.venv\Scripts\python.exe main.py validate-dataset --data dataset_v5_corrected/data.yaml
+.\.venv\Scripts\python.exe regression/prepare_corrected_dataset.py --verify-existing
+```
+
+`dataset_v5_corrected` contains 276 train boxes, 175 validation boxes, and the
+unchanged 281-box test split. Do not evaluate the test split while developing
+the next candidate.
+
+The reviewed manifest is `regression/fixed080_manifest.json`. Check a future
+checkpoint with one-page inference at the mandatory confidence `0.80`:
+
+```powershell
+.\.venv\Scripts\python.exe regression/fixed080_acceptance.py check --weights "runs/<candidate>/weights/best.pt" --output "output/regression_audit/<candidate>_fixed080.json" --enforce
+```
+
+Strict acceptance requires zero valid-reference losses, zero accepted known
+exclusions, zero critical boundary failures, and zero unreviewed new accepted
+boxes. Uncertain references are reported but do not affect the result. Review
+any unmatched new box before adding it to the manifest.
+
+### Monitored Corrective Pilot
+
+The pinned pilot configuration is `regression/corrective_pilot_config.json`.
+Running the monitor without an authorization flag performs preflight only and
+does not create a training run:
+
+```powershell
+.\.venv\Scripts\python.exe regression/monitored_corrective_pilot.py
+```
+
+Preflight verifies the corrected dataset and untouched test split hashes, the
+v3 starting checkpoint, the fresh v3 acceptance report, the regression
+manifest, Ultralytics `8.4.146`, and zero image overlap between the development
+dataset and the 172-page preservation suite.
+
+After explicit approval, the same tool launches the pinned three-epoch pilot:
+
+```powershell
+.\.venv\Scripts\python.exe regression/monitored_corrective_pilot.py --start-training
+```
+
+The trainer saves `epoch0.pt`, `epoch1.pt`, and `epoch2.pt`. Its synchronous
+`on_model_save` callback pauses training after each epoch and runs the full
+fixed-`0.80` suite. It stops before the next epoch if a valid reference is
+missed, a critical boundary fails, an unreviewed accepted box appears, or
+prediction provenance fails. Known exclusions remain a final promotion gate
+but do not stop an intermediate epoch while the pilot is still learning.
+
+Per-epoch reports, prediction caches, and `monitor_summary.json` are written to
+`output/regression_audit/legal_notice_v5_corrective_3_monitor/`. The process
+returns a failure status if preservation fails or if no epoch passes every
+promotion gate.
+
+The prepared pilot was run on September 12, 2026. Epoch 1 preserved all 271
+valid references and four critical boundaries but retained 15 of 17 known
+exclusions. Epoch 2 lost one valid reference and failed one boundary check, so
+the monitor stopped before epoch 3. No checkpoint passed promotion. See
+`output/regression_audit/legal_notice_v5_corrective_3_monitor/PILOT_FINDINGS.md`;
+do not rerun the same named configuration or use its `best.pt` in production.
 
 ## V3 New-Date Testing Reference
 
@@ -182,7 +257,7 @@ The validation-selected v3 candidate and its frozen evaluation settings are:
 
 ```text
 Weights:    runs/legal_notice_v3_controlled_50/weights/best.pt
-Confidence: 0.20
+Confidence: 0.80
 Image size: 1280
 Device:     CPU
 Render DPI: 200
@@ -210,42 +285,23 @@ Put complete issues in these folders rather than selecting only expected notice
 pages. Complete issues also test rejection of editorial pages, ordinary ads,
 name changes, and lost-document notices.
 
-### Recommended Confidence: 0.20
+### Required Acceptance Confidence: 0.80
 
 Run this first for normal new-date testing:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.20 --name "v3_new_dates_conf020"
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.80 --name "v3_new_dates_conf080"
 ```
 
 To process only one PDF, replace the input directory with its path:
 
 ```powershell
-.\.venv\Scripts\python.exe main.py detect --input "input/new_dates/alfajr/alfajr_2026-09-10.pdf" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.20 --name "v3_alfajr_20260910_conf020"
+.\.venv\Scripts\python.exe main.py detect --input "input/new_dates/alfajr/alfajr_2026-09-10.pdf" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.80 --name "v3_alfajr_20260910_conf080"
 ```
 
-### Exploratory Confidence Comparison
-
-Use separate output names to compare lower and higher confidence settings on
-new-date PDFs. The `0.20` result is the recommended run above. Confidence `0.10`
-favors recall and normally produces more false positives. Confidence `0.30`
-favors precision and may miss real notices.
-
-```powershell
-.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.10 --name "v3_new_dates_conf010"
-```
-
-```powershell
-.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.15 --name "v3_new_dates_conf015"
-```
-
-```powershell
-.\.venv\Scripts\python.exe main.py detect --input "input/new_dates" --weights "runs/legal_notice_v3_controlled_50/weights/best.pt" --dpi 200 --image-size 1280 --confidence 0.30 --name "v3_new_dates_conf030"
-```
-
-These confidence runs are exploratory. Keep `0.20` as the frozen setting for
-formal evaluation unless a new threshold is selected using a separate
-validation set. Do not tune the threshold on the held-out test split.
+Lower-confidence predictions may be generated for diagnosis, but they do not
+satisfy the fixed-`0.80` acceptance contract. Do not tune the threshold on the
+held-out test split.
 
 ### Detection Outputs
 
@@ -288,7 +344,7 @@ untouched `dataset_v3` test split once:
 Record this result as the final held-out measurement. If the model or threshold
 is changed in response to the result, the same split is no longer an independent
 test for the changed system; use a new held-out set. `evaluate` reports standard
-YOLO metrics across its confidence curve; use the frozen `0.20` threshold for
+YOLO metrics across its confidence curve; use the frozen `0.80` threshold for
 the separate operational PDF review described above.
 
 ## Detect Legal Notices

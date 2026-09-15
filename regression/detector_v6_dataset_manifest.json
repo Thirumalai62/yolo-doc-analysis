@@ -1,0 +1,122 @@
+{
+  "release": "legal_notice_detector_v6_prep",
+  "dataset": "dataset_v5_corrected",
+  "dataset_sha256": "639a294efc01ef5b360a92f9aef55d3c41d6bb469507dab48cecf895b5225c5b",
+  "images_sha256": "43411dc1933d1b26ee544cfffa07d85454e215f966c2cf83ea3e428dd521be7f",
+  "test_split_sha256": "9b76bf5f5c3fe59a9beb935aebb114704ee90538127147473e4f71da1c4f33c6",
+  "verification_report": "output/regression_audit/dataset_v5_corrected_verification.json",
+  "counts": {
+    "train": {"images": 67, "label_files": 67, "boxes": 276},
+    "val": {"images": 36, "label_files": 36, "boxes": 175},
+    "test": {"images": 36, "label_files": 36, "boxes": 281}
+  },
+  "content_delta_from_dataset_v5_corrected": {
+    "added_pages": [],
+    "removed_pages": [],
+    "changed_labels": [],
+    "reason": "The full audit found direct train and validation coverage for every available priority exclusion family. Adding another copy would duplicate reviewed development content rather than close a gap."
+  },
+  "coverage": [
+    {
+      "category": "private_personal_name_change",
+      "status": "direct_train_and_val",
+      "train_examples": [
+        "alfajr_2026-09-01_page_0015.png",
+        "alfajr_2026-09-02_page_0016.png",
+        "gulftoday_2026-09-02_page_0013.png"
+      ],
+      "val_examples": ["alfajr_2026-09-03_page_0016.png"]
+    },
+    {
+      "category": "vehicle_auction_or_disposal",
+      "status": "direct_train_and_val",
+      "train_examples": [
+        "gulftoday_2026-08-11_page_0007.png",
+        "gulftoday_2026-08-12_page_0007.png",
+        "albayan_2026-08-14_page_0027.png",
+        "alfajr_2026-08-14_page_0013.png"
+      ],
+      "val_examples": [
+        "albayan_2026-08-21_page_0026.png",
+        "albayan_2026-08-21_page_0027.png"
+      ]
+    },
+    {
+      "category": "product_or_vehicle_recall",
+      "status": "direct_train_and_val",
+      "train_examples": ["gulftoday_2026-08-21_page_0013.png"],
+      "val_examples": ["khaleejtimes_2026-08-20_page_0005.png"],
+      "note": "The train page contains one excluded product recall, ten labeled valid notices, and one excluded property advertisement."
+    },
+    {
+      "category": "recruitment_and_ordinary_advertising",
+      "status": "direct_mixed_pages_train_and_val",
+      "train_examples": [
+        "khaleejtimes_2026-08-17_page_0014.png",
+        "khaleejtimes_2026-08-18_page_0014.png"
+      ],
+      "val_examples": [
+        "khaleejtimes_2026-08-19_page_0014.png",
+        "khaleejtimes_2026-08-20_page_0014.png",
+        "khaleejtimes_2026-08-21_page_0014.png"
+      ]
+    },
+    {
+      "category": "procurement_tender_or_rfp",
+      "status": "direct_train_and_val",
+      "train_examples": [
+        "khaleejtimes_2026-08-10_page_0004.png",
+        "khaleejtimes_2026-08-14_page_0004.png",
+        "khaleejtimes_2026-08-17_page_0007.png",
+        "khaleejtimes_2026-08-17_page_0011.png",
+        "khaleejtimes_2026-08-18_page_0002.png",
+        "khaleejtimes_2026-08-18_page_0007.png"
+      ],
+      "val_examples": [
+        "khaleejtimes_2026-08-19_page_0005.png",
+        "khaleejtimes_2026-08-19_page_0007.png",
+        "khaleejtimes_2026-08-20_page_0004.png"
+      ]
+    },
+    {
+      "category": "lost_documents_or_share_certificates",
+      "status": "direct_train_and_val_split_imbalanced",
+      "train_examples": [
+        "albayan_2026-09-01_page_0031.png",
+        "albayan_2026-09-02_page_0031.png"
+      ],
+      "val_examples": ["alfajr_2026-09-03_page_0005.png"]
+    },
+    {
+      "category": "unrelated_editorial_or_news",
+      "status": "broad_train_and_val_exact_regression_layouts_approximate",
+      "train_examples": [
+        "albayan_2026-08-17_page_0001.png",
+        "albayan_2026-08-18_page_0001.png",
+        "albayan_2026-08-20_page_0001.png"
+      ],
+      "val_examples": [
+        "alfajr_2026-08-17_page_0001.png",
+        "khaleejtimes_2026-08-19_page_0008.png",
+        "albayan_2026-08-11_page_0002.png",
+        "albayan_2026-08-21_page_0028.png"
+      ]
+    },
+    {
+      "category": "private_warning_advertisement",
+      "status": "unavailable_in_eligible_development_issues",
+      "train_examples": [],
+      "val_examples": [],
+      "note": "All 36 eligible development issues were searched and the three candidates were visually rejected. September 9-10 and held-out data remain prohibited."
+    }
+  ],
+  "guardrails": {
+    "training_authorized": false,
+    "initial_weights": "runs/legal_notice_v3_controlled_50/weights/best.pt",
+    "initial_weights_sha256": "4416cc5bc905cdbc9806ed0ba810a9a8446cd5d392a126cc296e57d3efad5b81",
+    "confidence": 0.8,
+    "image_size": 1280,
+    "held_out_test_unchanged": true,
+    "september_09_10_training_use": false
+  }
+}

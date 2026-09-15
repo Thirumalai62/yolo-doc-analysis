@@ -1,0 +1,40 @@
+{
+  "source_dataset": "dataset_v4",
+  "destination_dataset": "dataset_v5_corrected",
+  "reason": "Remove confirmed private personal-name changes from legal_notice positives.",
+  "removals": [
+    {
+      "split": "train",
+      "image": "alfajr_2026-09-01_page_0015.png",
+      "label_line": 2,
+      "expected_label": "0 0.384382 0.599354 0.219864 0.091557",
+      "reason": "private personal-name change"
+    },
+    {
+      "split": "train",
+      "image": "alfajr_2026-09-02_page_0016.png",
+      "label_line": 9,
+      "expected_label": "0 0.153146 0.293050 0.222138 0.138784",
+      "reason": "private personal-name change"
+    },
+    {
+      "split": "train",
+      "image": "gulftoday_2026-09-02_page_0013.png",
+      "label_line": 11,
+      "expected_label": "0 0.822788 0.741174 0.309962 0.090502",
+      "reason": "private personal-name change"
+    },
+    {
+      "split": "val",
+      "image": "alfajr_2026-09-03_page_0016.png",
+      "label_line": 1,
+      "expected_label": "0 0.153715 0.145244 0.224792 0.135442",
+      "reason": "private personal-name change"
+    }
+  ],
+  "expected_counts": {
+    "train": {"images": 67, "boxes": 276},
+    "val": {"images": 36, "boxes": 175},
+    "test": {"images": 36, "boxes": 281}
+  }
+}
