@@ -179,6 +179,13 @@ def preflight(config_path: Path, require_empty_outputs: bool = True) -> tuple[di
     model = application.load_yolo(weights_path)
     application.require_legal_notice_model(model)
     trainable_names = expected_trainable_names(model.model, training["frozen_layers"])
+    head = model.model.model[-1]
+    active_prefix = f"model.{head.i}.{'one2one_cv3' if model.model.end2end else 'cv3'}."
+    if not any(name.startswith(active_prefix) for name in trainable_names):
+        raise SystemExit(
+            f"Freeze plan does not train the inference-active head ({active_prefix}). "
+            "Use the corrected regression/active_head_pilot.py trainer."
+        )
     if trainable_names != config["expected_trainable_parameters"]:
         raise SystemExit(f"Freeze plan resolves to unexpected trainable parameters: {trainable_names}")
     parameter_count = sum(

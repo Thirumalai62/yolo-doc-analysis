@@ -1,0 +1,7 @@
+{
+  "base_config": "regression/protected_correction_r2_config.json",
+  "run_name": "legal_notice_v8_protected_head_cpu_r4",
+  "feature_layer": "pre_pointwise",
+  "max_iterations": 100,
+  "revision_reason": "Linear score corrections cannot satisfy high-confidence training negatives under tight preservation. Allow the final native nonlinear classification block to learn while keeping all feature extraction and box branches fixed. Retain R2's tight score-preservation objective."
+}

@@ -1,0 +1,32 @@
+{
+  "run_name": "legal_notice_v7_active_head_cpu_3",
+  "starting_weights": "runs/legal_notice_v6_clslogit_cpu_2_r1/weights/best.pt",
+  "starting_weights_sha256": "3204479f9feceab7a3124f49a2a1bde2a9ae13425e473b207dde524f04c98283",
+  "dataset": "dataset_v5_corrected/data.yaml",
+  "development_sha256": "c3a4928f1141f62ac6b1476c8df38d169d8fdafaf1da9c5fc17bdb4905d7ceda",
+  "fixed_manifest": "regression/fixed080_manifest.json",
+  "fixed_manifest_sha256": "f8fb3ae50ef1e886a1df42834b6edbc7e27e675fb4197f35a7e03d2e251575e0",
+  "challenge_manifest": "regression/full_category_challenge_manifest.json",
+  "challenge_manifest_sha256": "1b39707d6ea283c5b87259edb903e51787d5ba1161ae75a6214162fc9dea91f0",
+  "ultralytics_version": "8.4.146",
+  "trainable_prefix": "model.23.cv3.",
+  "trainable_parameters": 550659,
+  "trainable_tensors": 42,
+  "probe_train_image": "gulftoday_2026-08-14_page_0013.png",
+  "training": {
+    "epochs": 3, "device": "cpu", "imgsz": 1280, "batch": 1,
+    "workers": 0, "pretrained": true, "resume": false,
+    "optimizer": "SGD", "lr0": 0.0001, "lrf": 1.0,
+    "momentum": 0.9, "weight_decay": 0.0, "nbs": 1,
+    "warmup_epochs": 0.0, "warmup_bias_lr": 0.0,
+    "freeze": [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,"23.cv2","23.one2one_cv2","23.one2one_cv3"],
+    "mosaic": 0.0, "close_mosaic": 0, "scale": 0.0, "translate": 0.0,
+    "degrees": 0.0, "shear": 0.0, "perspective": 0.0,
+    "fliplr": 0.0, "flipud": 0.0, "hsv_h": 0.0, "hsv_s": 0.0, "hsv_v": 0.0,
+    "bgr": 0.0, "mixup": 0.0, "cutmix": 0.0, "copy_paste": 0.0,
+    "multi_scale": 0.0, "amp": false, "compile": false, "cache": false,
+    "rect": false, "val": true, "split": "val", "plots": false,
+    "save": true, "save_period": 1, "patience": 0,
+    "seed": 0, "deterministic": true, "single_cls": false
+  }
+}

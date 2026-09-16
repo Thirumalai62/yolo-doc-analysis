@@ -1,0 +1,10 @@
+{
+  "base_config": "regression/protected_correction_r2_config.json",
+  "feature_cache_run": "legal_notice_v8_protected_scores_cpu_r2",
+  "run_name": "legal_notice_v8_protected_scores_cpu_r3",
+  "guard_mode": "decision_margin",
+  "target_negative_probability": 0.65,
+  "guard_weight": 100.0,
+  "max_iterations": 400,
+  "revision_reason": "R2 retains high-score train negatives despite target penalties. Test decision-margin preservation instead of unnecessary exact-logit matching; no evaluation features enter fitting."
+}

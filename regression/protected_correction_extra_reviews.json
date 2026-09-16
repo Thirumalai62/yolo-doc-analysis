@@ -1,0 +1,30 @@
+{
+  "purpose": "Evaluation-only semantic review of additional detections; never used for training",
+  "reviews": [
+    {
+      "suite": "july", "issue": "gulftoday_2026-07-02", "page": 12,
+      "xyxy": [815.32, 3185.58, 1566.45, 3916.46], "classification": "valid",
+      "reason": "Hamriyah Free Zone Authority notice 91/2026, shareholder changes and additional shareholders; whole panel reviewed."
+    },
+    {
+      "suite": "fixed080", "issue": "gulftoday_2026-09-09", "page": 14,
+      "xyxy": [110.31, 3168.79, 805.47, 3918.43], "classification": "valid",
+      "reason": "SRTIP notice NP/209/2026/MS listing companies in liquidation and the creditor objection period; whole panel reviewed."
+    },
+    {
+      "suite": "fixed080", "issue": "gulftoday_2026-09-10", "page": 6,
+      "xyxy": [81.1, 3170.32, 834.69, 3914.82], "classification": "valid",
+      "reason": "Hamriyah notice 128/2026: shareholder changes, additional shareholders, and company-name changes; whole panel reviewed."
+    },
+    {
+      "suite": "fixed080", "issue": "gulftoday_2026-09-10", "page": 12,
+      "xyxy": [1574.13, 2417.68, 2305.23, 3158.14], "classification": "valid",
+      "reason": "SRTIP NP/210/2026/MA multi-company liquidation and creditor notice; whole panel reviewed."
+    },
+    {
+      "suite": "fixed080", "issue": "alfajr_2026-09-09", "page": 18,
+      "xyxy": [93.16, 2521.72, 1346.3, 4489.0], "classification": "excluded",
+      "reason": "Dubai Court / Emirates Auction vehicle-sale table. Court branding does not make vehicle disposals in scope."
+    }
+  ]
+}

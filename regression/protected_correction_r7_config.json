@@ -1,0 +1,43 @@
+{
+  "base_config": "regression/protected_correction_r2_config.json",
+  "run_name": "legal_notice_v8_protected_head_cpu_r7_paa_analogue",
+  "feature_layer": "pre_pointwise",
+  "warm_start_run": "legal_notice_v8_protected_head_cpu_r6",
+  "max_iterations": 400,
+  "eligible_extra_train_issues": ["khaleejtimes_2026-09-11"],
+  "negative_regions_xyxyn": {
+    "khaleejtimes_2026-08-10_page_0004.png": [[0.04, 0.795, 0.345, 0.978]],
+    "khaleejtimes_2026-08-14_page_0004.png": [[0.04, 0.760, 0.50, 0.978]],
+    "khaleejtimes_2026-08-17_page_0007.png": [[0.04, 0.760, 0.50, 0.978]],
+    "khaleejtimes_2026-08-17_page_0011.png": [[0.655, 0.533, 0.960, 0.978]],
+    "khaleejtimes_2026-08-18_page_0002.png": [[0.503, 0.760, 0.958, 0.978]],
+    "khaleejtimes_2026-08-18_page_0004.png": [[0.04, 0.865, 0.345, 0.978]],
+    "khaleejtimes_2026-08-18_page_0007.png": [[0.04, 0.760, 0.50, 0.978], [0.503, 0.760, 0.958, 0.978]],
+    "alfajr_2026-08-14_page_0013.png": [[0.045, 0.510, 0.493, 0.965]],
+    "gulftoday_2026-08-11_page_0007.png": [[0.037, 0.350, 0.977, 0.980]],
+    "khaleejtimes_2026-08-24_page_0004.png": [[0.04, 0.849, 0.345, 0.978]],
+    "khaleejtimes_2026-08-28_page_0004.png": [[0.04, 0.655, 0.345, 0.978]],
+    "khaleejtimes_2026-09-11_page_0006.png": [[0.04, 0.690, 0.360, 0.985]]
+  },
+  "extra_train_pages": [
+    {
+      "issue": "khaleejtimes_2026-08-24", "image_name": "khaleejtimes_2026-08-24_page_0004.png",
+      "image": "output/legal_notices/khaleejtimes_2026-08-24/rendered/khaleejtimes_2026-08-24/page_0004.png",
+      "split": "train", "reviewed_no_valid_notices": true,
+      "review": "Whole page visually reviewed. News and PARCO supply-of-power-cable tender 6000013614. No legal notices."
+    },
+    {
+      "issue": "khaleejtimes_2026-08-28", "image_name": "khaleejtimes_2026-08-28_page_0004.png",
+      "image": "output/legal_notices/khaleejtimes_2026-08-28/rendered/khaleejtimes_2026-08-28/page_0004.png",
+      "split": "train", "reviewed_no_valid_notices": true,
+      "review": "Whole page visually reviewed. News and CPGCL invitation for bids, contract T-Rehab-02. No legal notices."
+    },
+    {
+      "issue": "khaleejtimes_2026-09-11", "image_name": "khaleejtimes_2026-09-11_page_0006.png",
+      "image": "output/legal_notices/khaleejtimes_2026-09-11/rendered/khaleejtimes_2026-09-11/page_0006.png",
+      "split": "train", "reviewed_no_valid_notices": true,
+      "review": "Whole page visually reviewed. News and a Pakistan Airports Authority expression of interest for procurement of consultancy services. No legal notices. Separate issue and solicitation from the July evaluation panel; validation, test, held-out, and preservation issues excluded."
+    }
+  ],
+  "revision_reason": "Add one reviewed, eligible same-authority and same-layout-family procurement negative after the unchanged R6 objective converged without rejecting the July PAA panel. The correction method, loss weights, threshold, and model scope are unchanged."
+}

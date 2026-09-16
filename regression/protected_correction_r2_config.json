@@ -1,0 +1,49 @@
+{
+  "run_name": "legal_notice_v8_protected_scores_cpu_r2",
+  "starting_weights": "runs/legal_notice_v6_clslogit_cpu_2_r1/weights/best.pt",
+  "starting_weights_sha256": "3204479f9feceab7a3124f49a2a1bde2a9ae13425e473b207dde524f04c98283",
+  "development_sha256": "c3a4928f1141f62ac6b1476c8df38d169d8fdafaf1da9c5fc17bdb4905d7ceda",
+  "ultralytics_version": "8.4.146",
+  "imgsz": 1280, "confidence": 0.8, "device": "cpu",
+  "target_table_probability": 0.97, "target_negative_probability": 0.5,
+  "positive_logit_tolerance": 0.05, "background_logit_tolerance": 0.15,
+  "guard_weight": 25.0, "ridge_weight": 0.01, "max_iterations": 400,
+  "negative_pooling": "max",
+  "positive_corrections": {
+    "gulftoday_2026-08-14_page_0013.png": [7, 10],
+    "gulftoday_2026-08-21_page_0013.png": [10],
+    "gulftoday_2026-09-02_page_0012.png": [3]
+  },
+  "negative_regions_xyxyn": {
+    "khaleejtimes_2026-08-10_page_0004.png": [[0.04, 0.795, 0.345, 0.978]],
+    "khaleejtimes_2026-08-14_page_0004.png": [[0.04, 0.760, 0.50, 0.978]],
+    "khaleejtimes_2026-08-17_page_0007.png": [[0.04, 0.760, 0.50, 0.978]],
+    "khaleejtimes_2026-08-17_page_0011.png": [[0.655, 0.533, 0.960, 0.978]],
+    "khaleejtimes_2026-08-18_page_0002.png": [[0.503, 0.760, 0.958, 0.978]],
+    "khaleejtimes_2026-08-18_page_0004.png": [[0.04, 0.865, 0.345, 0.978]],
+    "khaleejtimes_2026-08-18_page_0007.png": [[0.04, 0.760, 0.50, 0.978], [0.503, 0.760, 0.958, 0.978]],
+    "alfajr_2026-08-14_page_0013.png": [[0.045, 0.510, 0.493, 0.965]],
+    "gulftoday_2026-08-11_page_0007.png": [[0.037, 0.350, 0.977, 0.980]],
+    "khaleejtimes_2026-08-24_page_0004.png": [[0.04, 0.849, 0.345, 0.978]],
+    "khaleejtimes_2026-08-28_page_0004.png": [[0.04, 0.655, 0.345, 0.978]]
+  },
+  "extra_train_pages": [
+    {
+      "issue": "khaleejtimes_2026-08-24", "image_name": "khaleejtimes_2026-08-24_page_0004.png",
+      "image": "output/legal_notices/khaleejtimes_2026-08-24/rendered/khaleejtimes_2026-08-24/page_0004.png",
+      "split": "train", "reviewed_no_valid_notices": true,
+      "review": "Whole page visually reviewed. News and PARCO supply-of-power-cable tender 6000013614. No legal notices. Different authority and contract from July DEWA/PAA targets; no July content reused."
+    },
+    {
+      "issue": "khaleejtimes_2026-08-28", "image_name": "khaleejtimes_2026-08-28_page_0004.png",
+      "image": "output/legal_notices/khaleejtimes_2026-08-28/rendered/khaleejtimes_2026-08-28/page_0004.png",
+      "split": "train", "reviewed_no_valid_notices": true,
+      "review": "Whole page visually reviewed. News and CPGCL invitation for bids, contract T-Rehab-02, steam-turbine rehabilitation. No legal notices. Different authority and contract from July PAA consultancy procurement."
+    }
+  ],
+  "notes": [
+    "Revision justified by train objective failing to suppress highest-confidence negative anchors and by review of new vehicle-table false positive.",
+    "Four newly accepted validation/preservation tables were visually reviewed as genuine notices; none is used for training.",
+    "The original dataset is unchanged. The two additional reviewed negative pages are a separately versioned training-only overlay."
+  ]
+}

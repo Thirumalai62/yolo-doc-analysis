@@ -1,0 +1,36 @@
+{
+  "run_name": "legal_notice_v8_protected_scores_cpu",
+  "starting_weights": "runs/legal_notice_v6_clslogit_cpu_2_r1/weights/best.pt",
+  "starting_weights_sha256": "3204479f9feceab7a3124f49a2a1bde2a9ae13425e473b207dde524f04c98283",
+  "development_sha256": "c3a4928f1141f62ac6b1476c8df38d169d8fdafaf1da9c5fc17bdb4905d7ceda",
+  "ultralytics_version": "8.4.146",
+  "imgsz": 1280,
+  "confidence": 0.8,
+  "device": "cpu",
+  "target_table_probability": 0.97,
+  "target_negative_probability": 0.5,
+  "positive_logit_tolerance": 0.05,
+  "background_logit_tolerance": 0.15,
+  "guard_weight": 25.0,
+  "ridge_weight": 0.01,
+  "max_iterations": 200,
+  "positive_corrections": {
+    "gulftoday_2026-08-14_page_0013.png": [7, 10],
+    "gulftoday_2026-08-21_page_0013.png": [10],
+    "gulftoday_2026-09-02_page_0012.png": [3]
+  },
+  "negative_regions_xyxyn": {
+    "khaleejtimes_2026-08-10_page_0004.png": [[0.04, 0.795, 0.345, 0.978]],
+    "khaleejtimes_2026-08-14_page_0004.png": [[0.04, 0.760, 0.50, 0.978]],
+    "khaleejtimes_2026-08-17_page_0007.png": [[0.04, 0.760, 0.50, 0.978]],
+    "khaleejtimes_2026-08-17_page_0011.png": [[0.655, 0.533, 0.960, 0.978]],
+    "khaleejtimes_2026-08-18_page_0002.png": [[0.503, 0.760, 0.958, 0.978]],
+    "khaleejtimes_2026-08-18_page_0007.png": [[0.04, 0.760, 0.50, 0.978], [0.503, 0.760, 0.958, 0.978]]
+  },
+  "notes": [
+    "Only final one-to-many score convolutions are updated; feature extraction and all decoded anchor boxes remain frozen.",
+    "All gradient inputs come from the 67 train pages. Validation, July, and September preservation pages are excluded from fitting.",
+    "Background preservation is a trust-region constraint, not a claim that teacher false positives are legal notices.",
+    "Reviewed correction regions override teacher preservation; corrections cannot overlap a positive label."
+  ]
+}

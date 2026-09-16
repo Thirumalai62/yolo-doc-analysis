@@ -1,0 +1,23 @@
+{
+  "review_source": "test-summary/summary-v5.md",
+  "role": "evaluation_only_no_training",
+  "notes": [
+    "Preserve user-reviewed accepted detections on all nine July issues, excluding the two confirmed procurement panels.",
+    "This is a baseline-preservation suite plus visually reviewed missed panels, not exhaustive page ground truth.",
+    "Three separate whole-panel references are required on Gulf Today page 12; rows are not separate notices."
+  ],
+  "issues": [
+    "alfajr_2026-07-01", "alfajr_2026-07-02", "alfajr_2026-07-03",
+    "gulftoday_2026-07-01", "gulftoday_2026-07-02", "gulftoday_2026-07-03",
+    "khaleejtimes_2026-07-01", "khaleejtimes_2026-07-02", "khaleejtimes_2026-07-03"
+  ],
+  "exclusions": [
+    {"issue": "khaleejtimes_2026-07-02", "page": 4, "detection_id": 1, "category": "procurement_tender_or_rfp", "reason": "DEWA tender RFX 2212600026"},
+    {"issue": "khaleejtimes_2026-07-03", "page": 2, "detection_id": 1, "category": "procurement_tender_or_rfp", "reason": "Pakistan Airports Authority consultancy procurement corrigendum"}
+  ],
+  "missed_valid": [
+    {"issue": "gulftoday_2026-07-03", "page": 12, "id": "srtip_left_liquidation", "xyxy": [832, 2028, 1538, 2752], "category": "liquidation_table"},
+    {"issue": "gulftoday_2026-07-03", "page": 12, "id": "srtip_right_liquidation", "xyxy": [1574, 2028, 2280, 2752], "category": "liquidation_table"},
+    {"issue": "gulftoday_2026-07-03", "page": 12, "id": "hamriyah_termination_shareholders", "xyxy": [1574, 2790, 2280, 3528], "category": "company_termination_table"}
+  ]
+}
