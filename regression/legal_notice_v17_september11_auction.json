@@ -1,0 +1,20 @@
+{
+  "suite": "legal_notice_v17_september11_auction",
+  "source_report": "test-summary/summary-v4.md",
+  "source_pdf": "input/gulftoday_2026-09-11.pdf",
+  "source_pdf_sha256": "b7caf59d42bbcb683994b9304ae87446b9c361b8022dc321c666b0d1cf82497e",
+  "page": 7,
+  "image": "output/regression_audit/legal_notice_v17_release_inventory/sept11/page_0007.png",
+  "image_sha256": "539ad7aefbe6184d71623ca2a319b4b51ef1601717be4ed9d85c6c0f87c680d5",
+  "width": 2339,
+  "height": 4022,
+  "review": "Whole bottom panel visually verified as a Northern Emirates Real Estate Auction advertisement by Emirates Auction, not an in-scope legal notice.",
+  "regions": [
+    {
+      "id": "gulftoday_2026-09-11_p0007_northern_emirates_real_estate_auction",
+      "category": "real_estate_auction_advertisement",
+      "classification": "excluded",
+      "xyxyn": [0.035, 0.7, 0.975, 0.985]
+    }
+  ]
+}

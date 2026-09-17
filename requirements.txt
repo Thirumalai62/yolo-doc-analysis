@@ -1,5 +1,5 @@
 # Install PyTorch separately from the CPU index; see main.py setup.
-ultralytics>=8.4.0
+ultralytics==8.4.146
 huggingface_hub>=0.30.0
 pypdfium2>=4.30.0
 Pillow>=10.0.0

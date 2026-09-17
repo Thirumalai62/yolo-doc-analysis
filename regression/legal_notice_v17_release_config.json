@@ -1,0 +1,50 @@
+{
+  "name": "legal_notice_v17_complete_release_contract",
+  "deployment": {
+    "confidence": 0.8,
+    "diagnostic_confidence": 0.01,
+    "negative_ceiling": 0.5,
+    "image_size": 1280,
+    "device": "cpu",
+    "render_dpi": 200,
+    "nms_iou": 0.7,
+    "max_detections": 300
+  },
+  "manifests": {
+    "fixed": {"path": "regression/fixed080_manifest.json", "sha256": "f8fb3ae50ef1e886a1df42834b6edbc7e27e675fb4197f35a7e03d2e251575e0"},
+    "challenge": {"path": "regression/full_category_challenge_manifest.json", "sha256": "1b39707d6ea283c5b87259edb903e51787d5ba1161ae75a6214162fc9dea91f0"},
+    "july": {"path": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/july_manifest.json", "sha256": "c4391a9e24ffdc384a36ef8eca91adad9d9cab932d0fc9eee9d72e1352b3b881"},
+    "target": {"path": "output/correction_data/legal_notice_v10_targeted_correction/manifest.json", "sha256": "bc7bbb69e2283195370c7689f27d33cd341829a5496de88aa0438b48ff0a2dd7"},
+    "september15": {"path": "output/regression_audit/gulftoday_sept15_direct_training/manifest.json", "sha256": "026f70e16ece5cd28083a78fea732037b5dfbe514d89b958fd569d0fd2cc3267"},
+    "historical": {"path": "output/regression_audit/legal_notice_v9_preflight/historical_manifest.json", "sha256": "8a0fa166a71d786fa5a3cb1bcbac94f00bbbce1e11f32723cecdc68edbd8f557"},
+    "september11": {"path": "regression/legal_notice_v17_september11_auction.json", "sha256": "2e649ffb8f516efb41b1ccf6e2a07aea12a577690cc60315bd4dcbe60f83ac7d"},
+    "semantic_reviews": {"path": "regression/protected_correction_extra_reviews.json", "sha256": "f83686aded7eceae3f10abf2b39dd6c223768172c3f7967dc291ab72775b66d6"}
+  },
+  "baselines": {
+    "r7_weights": "runs/legal_notice_v8_protected_head_cpu_r7_paa_analogue/weights/candidate.pt",
+    "r7_weights_sha256": "2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76",
+    "historical_r7": "output/regression_audit/legal_notice_v9_preflight/r7.json",
+    "historical_r7_sha256": "5f5921296adbe29e33a1ca81801fd2f6c0f94166f6c09ab5d1e0fce3afa12f7a"
+  },
+  "requirements": {
+    "fixed_valid": 271,
+    "fixed_excluded_accepted": 0,
+    "critical_boundaries": 4,
+    "challenge_valid": 31,
+    "challenge_excluded_accepted": 0,
+    "july_valid": 548,
+    "july_excluded_accepted": 0,
+    "july_recoveries": 3,
+    "target_valid": 21,
+    "target_negative_regions": 8,
+    "september15_valid": 19,
+    "september15_critical": 2,
+    "historical_valid": 400,
+    "historical_excluded": 3,
+    "historical_maximum_valid_score_drop": 0.02,
+    "semantic_valid": 4,
+    "semantic_excluded": 1,
+    "september11_excluded": 1,
+    "unresolved_additional_detections": 0
+  }
+}

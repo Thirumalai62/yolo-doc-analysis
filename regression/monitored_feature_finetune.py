@@ -6,18 +6,24 @@ from datetime import datetime, timezone
 import gc
 import json
 from pathlib import Path
+import shutil
 import statistics
 import sys
 
 import torch
 from ultralytics import YOLO, __version__
-from ultralytics.utils.torch_utils import unwrap_model
+from ultralytics.data.build import InfiniteDataLoader
+from ultralytics.utils.torch_utils import torch_distributed_zero_first, unwrap_model
 
 import fixed080_acceptance as fixed
 import full_category_challenge as challenge
 import evaluation_cache
 from active_head_pilot import ActiveHeadLoss, ActiveHeadTrainer, evaluate_july, probe_scores
-from confidence_preserving_loss import BaselineForegroundFloorLoss
+from confidence_preserving_loss import (
+    BaselineForegroundFloorLoss,
+    FrozenTeacherForegroundFloorLoss,
+    PinnedTeacherReviewedClassificationLoss,
+)
 from legal_notice_v10_acceptance import area, intersection, match_references, read_labels
 from monitored_clslogit_pilot import run_challenge, run_fixed
 import prepare_corrected_dataset as dataset_tools
@@ -154,6 +160,58 @@ class DifferentialFeatureTrainer(ActiveHeadTrainer):
             weight_decay=0.0,
         )
 
+    def _build_train_pipeline(self):
+        require(ACTIVE_CONFIG is not None, "Trainer configuration was not installed")
+        active_config = ACTIVE_CONFIG
+        if active_config is None:
+            raise RuntimeError("Trainer configuration was not installed")
+        set_trainable_scope(unwrap_model(self.model), active_config)
+        super()._build_train_pipeline()
+
+    def get_dataloader(self, dataset_path: str, batch_size: int = 16, rank: int = -1, mode: str = "train"):
+        if mode != "train" or ACTIVE_CONFIG is None or ACTIVE_CONFIG.get("experiment") != "pinned_teacher_reviewed_cls_pilot":
+            return super().get_dataloader(dataset_path, batch_size, rank, mode)
+        require(batch_size == 1 and rank == -1, "Reviewed balanced sampling supports only single-process physical batch one")
+        with torch_distributed_zero_first(rank):
+            dataset = self.build_dataset(dataset_path, mode, batch_size)
+        require(getattr(dataset, "rect", False), "Reviewed training must retain rectangular page geometry")
+        sampler = BalancedPageSampler(dataset, ACTIVE_CONFIG["training"]["seed"])
+        generator = torch.Generator().manual_seed(ACTIVE_CONFIG["training"]["seed"])
+        return InfiniteDataLoader(
+            dataset=dataset,
+            batch_size=1,
+            sampler=sampler,
+            shuffle=False,
+            num_workers=0,
+            pin_memory=False,
+            collate_fn=dataset.collate_fn,
+            generator=generator,
+        )
+
+    def validate(self):
+        if ACTIVE_CONFIG is not None and ACTIVE_CONFIG.get("experiment") == "pinned_teacher_reviewed_cls_pilot":
+            training_loss = sum(float(value) for value in self.tloss.values())
+            return {}, -training_loss
+        return super().validate()
+
+    def final_eval(self):
+        if ACTIVE_CONFIG is not None and ACTIVE_CONFIG.get("experiment") == "pinned_teacher_reviewed_cls_pilot":
+            return
+        return super().final_eval()
+
+    def save_model(self):
+        """Keep the pinned teacher out of checkpoint deep copies and serialized weights."""
+        model = unwrap_model(self.model)
+        model_criterion = getattr(model, "criterion", None)
+        ema_criterion = getattr(self.ema.ema, "criterion", None)
+        model.criterion = None
+        self.ema.ema.criterion = None
+        try:
+            return super().save_model()
+        finally:
+            model.criterion = model_criterion
+            self.ema.ema.criterion = ema_criterion
+
     def optimizer_step(self):
         if getattr(self, "verified_update", False):
             return super(ActiveHeadTrainer, self).optimizer_step()
@@ -186,6 +244,38 @@ class DifferentialFeatureTrainer(ActiveHeadTrainer):
         write(self.audit_root / "first_update_verification.json", self.update_evidence)
 
 
+class BalancedPageSampler(torch.utils.data.Sampler[int]):
+    """Shuffle positive/background pages and spread both roles across an epoch."""
+
+    def __init__(self, dataset, seed: int):
+        self.seed = seed
+        self.epoch = 0
+        self.positive = [index for index, label in enumerate(dataset.labels) if len(label["cls"])]
+        self.background = [index for index, label in enumerate(dataset.labels) if not len(label["cls"])]
+        require(bool(self.positive) and bool(self.background), "Balanced sampling requires positive and background pages")
+
+    def __len__(self) -> int:
+        return len(self.positive) + len(self.background)
+
+    def set_epoch(self, epoch: int) -> None:
+        self.epoch = epoch
+
+    def epoch_order(self) -> list[int]:
+        generator = torch.Generator().manual_seed(self.seed + self.epoch)
+
+        def shuffled(values: list[int]) -> list[int]:
+            order = torch.randperm(len(values), generator=generator).tolist()
+            return [values[index] for index in order]
+
+        positive, background = shuffled(self.positive), shuffled(self.background)
+        spread = [((index + 0.5) / len(positive), value) for index, value in enumerate(positive)]
+        spread += [((index + 0.5) / len(background), value) for index, value in enumerate(background)]
+        return [value for _, value in sorted(spread)]
+
+    def __iter__(self):
+        yield from self.epoch_order()
+
+
 def optimizer_summary(model: torch.nn.Module, config: dict) -> list[dict]:
     summary = []
     for group in grouped_parameters(model, config):
@@ -215,11 +305,7 @@ def unresolved_unreviewed(report: dict, suite: str, reviews: list[dict]) -> list
 
 
 def validate_baselines(config: dict) -> None:
-    expected = {
-        "fixed": {"valid_preserved": 271, "valid_missed": 0, "excluded_accepted": 15, "critical_boundary_failures": 0, "unreviewed_accepted": 2},
-        "challenge": {"valid_preserved": 31, "valid_missed": 0, "excluded_accepted_regions": 6, "unreviewed_accepted": 0},
-        "july": {"valid_preserved": 548, "valid_missed": 0, "excluded_accepted_regions": 1, "unreviewed_accepted": 0},
-    }
+    expected = config["baseline_expectations"]
     for suite, required in expected.items():
         artifact = config["baseline_reports"][suite]
         path = project_path(artifact["path"])
@@ -239,11 +325,19 @@ def validate_config(config: dict) -> None:
     training = config["training"]
     optimizer = config["optimizer"]
     experiment = config.get("experiment", "feature_finetune")
+    expected_epochs = {
+        "confidence_preserving_cv3_pilot": 1,
+        "teacher_guarded_full_detector": 40,
+        "pinned_teacher_reviewed_cls_pilot": 1,
+    }.get(experiment, 12)
+    expected_warmup = 0.0 if experiment in (
+        "confidence_preserving_cv3_pilot", "teacher_guarded_full_detector", "pinned_teacher_reviewed_cls_pilot"
+    ) else 1.0
     required = {
-        "epochs": 1 if experiment == "confidence_preserving_cv3_pilot" else 12,
+        "epochs": expected_epochs,
         "device": "cpu", "image_size": 1280, "batch": 1, "workers": 0,
         "nominal_batch_size": 8, "gradient_accumulation": 8,
-        "warmup_epochs": 0.0 if experiment == "confidence_preserving_cv3_pilot" else 1.0,
+        "warmup_epochs": expected_warmup,
         "save_period": 1, "amp": False, "compile": False, "mosaic": 0.0,
     }
     for key, value in required.items():
@@ -254,6 +348,23 @@ def validate_config(config: dict) -> None:
         require(not config["trainable_scope"]["feature_prefixes"] and config["trainable_scope"]["head_prefixes"] == ["model.23.cv3."], "Pilot must train only the active classification tower")
         require(optimizer["head_learning_rate"] == 0.000001 and optimizer["weight_decay"] == 0.0, "Pilot optimizer safeguards changed")
         require(training["rectangular_batches"] is True, "Pilot must use deployment-like rectangular batches")
+    elif experiment == "teacher_guarded_full_detector":
+        require(config.get("loss") == {"name": "frozen_teacher_foreground_floor", "tal_topk": 10}, "Full-detector guarded loss changed")
+        require(config["trainable_scope"]["feature_prefixes"] and config["trainable_scope"]["head_prefixes"] == ["model.23.cv2.", "model.23.cv3."], "Full-detector scope must include features and both active heads")
+        require(optimizer["head_learning_rate"] == 0.000005 and optimizer["feature_learning_rate"] == 0.0000005 and optimizer["weight_decay"] == 0.0, "Full-detector optimizer safeguards changed")
+        require(training["rectangular_batches"] is True, "Full-detector training must use deployment-like rectangular batches")
+        require(training["full_evaluation_period"] == 5 and training["target_evaluation_period"] == 1, "Monitored evaluation cadence changed")
+    elif experiment == "pinned_teacher_reviewed_cls_pilot":
+        loss = config.get("loss", {})
+        require(loss.get("name") == "pinned_teacher_reviewed_classification", "Reviewed classification loss changed")
+        require(not config["trainable_scope"]["feature_prefixes"] and config["trainable_scope"]["head_prefixes"] == ["model.23.cv3."], "Reviewed pilot must train only the complete active classification towers")
+        require(optimizer["head_learning_rate"] == 0.000001 and optimizer["weight_decay"] == 0.0, "Reviewed pilot optimizer safeguards changed")
+        require(training["rectangular_batches"] is True and training["patience"] == 0, "Reviewed pilot geometry or early stopping changed")
+        require(training["full_evaluation_period"] == 1 and training["target_evaluation_period"] == 1, "Every pilot checkpoint must receive full fixed-0.80 evaluation")
+        require(training.get("native_validation") is False, "Generic mAP validation must not select reviewed pilot checkpoints")
+        require(config["deployment"] == {"confidence": 0.8, "image_size": 1280, "device": "cpu", "render_dpi": 200}, "Deployment contract changed")
+        for key in ("fixed_max_excluded_accepted", "challenge_max_excluded_accepted_regions", "july_max_excluded_accepted_regions"):
+            require(config["stopping"][key] == 0, f"Reviewed exclusion gate {key} must be zero")
     else:
         require(optimizer["head_learning_rate"] == 0.00005 and optimizer["feature_learning_rate"] == 0.000005, "Differential learning rates changed")
     require(config.get("training_authorization_required") is True, "Explicit authorization guard is required")
@@ -292,7 +403,12 @@ def gradient_preflight(model: torch.nn.Module, config: dict) -> dict:
     return {"probe": relative(image_path), "objective": float(objective.detach()), "gradient_norms": norms, "selected_tensors_with_gradients": len(gradients)}
 
 
-def confidence_loss_preflight(model: torch.nn.Module, config: dict) -> dict:
+def negative_region_map(config: dict) -> dict[str, list[list[float]]]:
+    manifest = load(project_path(config["target_manifest"]))
+    return {page["image_name"]: page["negative_regions_xyxyn"] for page in manifest["pages"] if page["negative_regions_xyxyn"]}
+
+
+def confidence_loss_preflight(model: torch.nn.Module, config: dict, teacher_model: torch.nn.Module | None = None) -> dict:
     import cv2
     import numpy as np
     from ultralytics.data.augment import LetterBox
@@ -324,6 +440,10 @@ def confidence_loss_preflight(model: torch.nn.Module, config: dict) -> dict:
         ])
     tensor = torch.from_numpy(np.ascontiguousarray(transformed[..., ::-1].transpose(2, 0, 1))).float()[None] / 255
     batch = {
+        "img": tensor,
+        "im_file": (str(image_path),),
+        "ori_shape": ((original_height, original_width),),
+        "ratio_pad": ((resized_height / original_height, resized_width / original_width),),
         "batch_idx": torch.zeros(len(boxes)),
         "cls": torch.zeros((len(boxes), 1)),
         "bboxes": torch.tensor(boxes, dtype=torch.float32),
@@ -333,15 +453,51 @@ def confidence_loss_preflight(model: torch.nn.Module, config: dict) -> dict:
     for module in model.modules():
         if isinstance(module, torch.nn.modules.batchnorm._BatchNorm):
             module.eval()
-    criterion = BaselineForegroundFloorLoss(model, tal_topk=config["loss"]["tal_topk"])
+    loss_name = config["loss"]["name"]
+    if loss_name == "pinned_teacher_reviewed_classification":
+        require(teacher_model is not None, "Reviewed loss preflight requires the pinned teacher")
+        criterion = PinnedTeacherReviewedClassificationLoss(model, teacher_model, config["loss"], negative_region_map(config))
+    else:
+        loss_class = FrozenTeacherForegroundFloorLoss if loss_name == "frozen_teacher_foreground_floor" else BaselineForegroundFloorLoss
+        criterion = loss_class(model, tal_topk=config["loss"]["tal_topk"])
     losses, _ = criterion(model(tensor), batch)
     losses.sum().backward()
     selected = scope_parameters(model, config)
     gradients = [parameter.grad for parameter in selected.values()]
-    require(all(gradient is not None and torch.isfinite(gradient).all() for gradient in gradients), "Guarded loss produced missing or nonfinite selected gradients")
+    require(any(gradient is not None for gradient in gradients), "Guarded loss produced no selected gradients")
+    require(all(gradient is None or torch.isfinite(gradient).all() for gradient in gradients), "Guarded loss produced nonfinite selected gradients")
     require(all(parameter.grad is None for name, parameter in model.named_parameters() if name not in selected), "Guarded loss reached a frozen parameter")
     diagnostics = criterion.last_diagnostics
-    require(diagnostics["foreground_anchors"] > 0 and diagnostics["protected_logits"] > 0, "Guarded loss did not protect foreground assignments")
+    if loss_name == "pinned_teacher_reviewed_classification":
+        require(diagnostics["preservation_groups"] + diagnostics["recovery_groups"] == len(labels), "Reviewed loss did not assign every probe label")
+        positive_diagnostics = diagnostics
+        negative_page = next(page for page in load(project_path(config["target_manifest"]))["pages"] if page["negative_regions_xyxyn"] and page["valid_notice_count"] == 0)
+        negative_path = project_path(negative_page["image"])
+        negative_image = cv2.imread(str(negative_path))
+        require(negative_image is not None, f"Could not load reviewed negative probe: {negative_path}")
+        negative_height, negative_width = negative_image.shape[:2]
+        negative_ratio = min(size / negative_height, size / negative_width)
+        negative_resized_width, negative_resized_height = round(negative_width * negative_ratio), round(negative_height * negative_ratio)
+        negative_pad_width, negative_pad_height = (size - negative_resized_width) % 32, (size - negative_resized_height) % 32
+        negative_left, negative_top = round(negative_pad_width / 2 - 0.1), round(negative_pad_height / 2 - 0.1)
+        negative_transformed = LetterBox(new_shape=(size, size), auto=True, stride=32)(image=negative_image)
+        negative_tensor = torch.from_numpy(np.ascontiguousarray(negative_transformed[..., ::-1].transpose(2, 0, 1))).float()[None] / 255
+        negative_batch = {
+            "img": negative_tensor,
+            "im_file": (str(negative_path),),
+            "ori_shape": ((negative_height, negative_width),),
+            "ratio_pad": ((negative_resized_height / negative_height, negative_resized_width / negative_width),),
+            "batch_idx": torch.zeros(0),
+            "cls": torch.zeros((0, 1)),
+            "bboxes": torch.zeros((0, 4)),
+        }
+        criterion(model(negative_tensor), negative_batch)
+        negative_diagnostics = criterion.last_diagnostics
+        require(positive_diagnostics["maximum_box_output_delta"] <= config["loss"]["maximum_box_output_delta"], "Reviewed loss changed frozen box outputs")
+        require(negative_diagnostics["rejection_groups"] > 0 and negative_diagnostics["explicit_negative_regions"] == len(negative_page["negative_regions_xyxyn"]), "Reviewed loss did not supervise the explicit negative region")
+        diagnostics = {"positive_probe": positive_diagnostics, "negative_probe": negative_diagnostics}
+    else:
+        require(diagnostics["foreground_anchors"] > 0 and diagnostics["protected_logits"] > 0, "Guarded loss did not protect foreground assignments")
     model.zero_grad(set_to_none=True)
     return {
         "probe": relative(image_path),
@@ -356,7 +512,9 @@ def preflight(config_path: Path, run_gradient_check: bool = True) -> tuple[dict,
     config = load(config_path)
     validate_config(config)
     require(__version__ == config["ultralytics_version"], "Ultralytics version changed")
-    for key in ("starting_weights", "dataset_manifest", "target_manifest", "fixed_manifest", "challenge_manifest", "july_review", "july_manifest", "semantic_extra_reviews"):
+    artifact_keys = ["starting_weights", "dataset_manifest", "target_manifest", "fixed_manifest", "challenge_manifest", "july_review", "july_manifest", "semantic_extra_reviews"]
+    artifact_keys.extend(key for key in ("annotation_audit", "acceptance_inventory", "geometry_report") if key in config)
+    for key in artifact_keys:
         path = project_path(config[key])
         require(path.is_file() and file_sha256(path) == config[key + "_sha256"], f"Changed {key}")
     data_path = project_path(config["dataset"])
@@ -367,6 +525,12 @@ def preflight(config_path: Path, run_gradient_check: bool = True) -> tuple[dict,
     manifest = load(project_path(config["dataset_manifest"]))
     require(manifest["training_authorized"] is False and manifest["sampling"]["epoch_samples"] == 109, "Dataset guard or sampling schedule changed")
     validate_baselines(config)
+    if config.get("experiment") == "pinned_teacher_reviewed_cls_pilot":
+        inventory = load(project_path(config["acceptance_inventory"]))
+        geometry = load(project_path(config["geometry_report"]))
+        require(inventory["counts"]["geometry_checks"] == 29 and inventory["policy"]["reviewed_exclusions_accepted"] == 0, "Acceptance inventory policy changed")
+        require(geometry["status"] == "passed" and geometry["totals"] == {"required": 29, "passed": 29, "failed": 0}, "Frozen-box geometry feasibility failed")
+        require(geometry["inventory_sha256"] == config["acceptance_inventory_sha256"] and geometry["weights_sha256"] == config["starting_weights_sha256"], "Geometry report provenance changed")
 
     split_issues = {}
     train_hashes = set()
@@ -400,9 +564,10 @@ def preflight(config_path: Path, run_gradient_check: bool = True) -> tuple[dict,
     groups = optimizer_summary(yolo.model, config)
     require(sum(group["parameters"] for group in groups) == scope["parameters"], "Optimizer parameter count changed")
     gradient = gradient_preflight(yolo.model, config) if run_gradient_check else {"status": "skipped"}
+    teacher_model = YOLO(str(project_path(config["starting_weights"]))).model if config.get("loss", {}).get("name") == "pinned_teacher_reviewed_classification" else None
     guarded_loss = (
-        confidence_loss_preflight(yolo.model, config)
-        if run_gradient_check and config.get("loss", {}).get("name") == "baseline_foreground_floor"
+        confidence_loss_preflight(yolo.model, config, teacher_model)
+        if run_gradient_check and config.get("loss", {}).get("name") in ("baseline_foreground_floor", "frozen_teacher_foreground_floor", "pinned_teacher_reviewed_classification")
         else {"status": "not_applicable" if "loss" not in config else "skipped"}
     )
     summary = {
@@ -424,6 +589,7 @@ def preflight(config_path: Path, run_gradient_check: bool = True) -> tuple[dict,
         "guarded_loss_preflight": guarded_loss,
         "effective_batch": config["training"]["gradient_accumulation"],
         "historical_test_policy": config["historical_test_policy"],
+        "pinned_teacher": {"path": config["starting_weights"], "sha256": config["starting_weights_sha256"]},
         "evaluation_cache": {**cache_inputs, "mode": "issue_scoped"},
     }
     return config, yolo, train_hashes, summary
@@ -454,12 +620,13 @@ def evaluate_target(weights: Path, config: dict, output: Path, expected_weights_
     model = YOLO(str(weights))
     pages = []
     totals = {"valid_expected": 0, "valid_accepted": 0, "negative_regions": 0, "negative_margin_passed": 0, "excluded_accepted": 0, "unmatched_accepted": 0}
+    deployment = config["deployment"]
     for page in manifest["pages"]:
         image = project_path(page["image"])
         label = project_path(page["label"])
-        result = model.predict(str(image), conf=0.01, imgsz=1280, device="cpu", verbose=False, save=False)[0]
+        result = model.predict(str(image), conf=0.01, imgsz=deployment["image_size"], device=deployment["device"], verbose=False, save=False)[0]
         predictions = [{"confidence": float(box.conf[0]), "xyxy": [float(value) for value in box.xyxy[0].tolist()]} for box in result.boxes]
-        accepted = [prediction for prediction in predictions if prediction["confidence"] >= 0.8]
+        accepted = [prediction for prediction in predictions if prediction["confidence"] >= deployment["confidence"]]
         references = read_labels(label, page["width"], page["height"])
         excluded_ids, regions = set(), []
         for normalized in page["negative_regions_xyxyn"]:
@@ -483,7 +650,7 @@ def evaluate_target(weights: Path, config: dict, output: Path, expected_weights_
     stop = config["stopping"]
     passed = totals == {"valid_expected": stop["target_valid_required"], "valid_accepted": stop["target_valid_required"], "negative_regions": stop["target_negative_regions_required"], "negative_margin_passed": stop["target_negative_regions_required"], "excluded_accepted": 0, "unmatched_accepted": 0}
     require(file_sha256(weights) == weight_hash, "Target checkpoint changed during evaluation")
-    report = {"suite": "v11_training_target_diagnostic", "passed": passed, "weights": relative(weights), "weights_sha256": weight_hash, "manifest_sha256": file_sha256(manifest_path), "totals": totals, "pages": pages}
+    report = {"suite": "v11_training_target_diagnostic", "passed": passed, "acceptance_confidence": deployment["confidence"], "weights": relative(weights), "weights_sha256": weight_hash, "manifest_sha256": file_sha256(manifest_path), "totals": totals, "pages": pages}
     write(output, report)
     del model
     gc.collect()
@@ -510,18 +677,19 @@ def confidence_preservation(config: dict, suite: str, baseline: dict, current: d
     current_scores = valid_confidences(current, suite)
     common = sorted(set(baseline_scores) & set(current_scores))
     drops = [baseline_scores[reference] - current_scores[reference] for reference in common]
+    paired_current = [current_scores[reference] for reference in common]
     result = {
         "paired_references": len(common),
         "baseline_references": len(baseline_scores),
         "current_references": len(current_scores),
         "median_baseline_confidence": statistics.median(baseline_scores.values()),
-        "median_current_confidence": statistics.median(current_scores.values()) if current_scores else None,
-        "median_confidence_drop": statistics.median(baseline_scores.values()) - statistics.median(current_scores.values()) if current_scores else None,
+        "median_current_confidence": statistics.median(paired_current) if paired_current else None,
+        "median_confidence_drop": statistics.median(baseline_scores.values()) - statistics.median(paired_current) if paired_current else None,
         "maximum_reference_confidence_drop": max(drops, default=None),
     }
     stop = config["stopping"]
     result["passed"] = (
-        len(common) == len(baseline_scores) == len(current_scores)
+        len(common) == len(baseline_scores)
         and result["median_confidence_drop"] <= stop["maximum_median_valid_confidence_drop"]
         and result["maximum_reference_confidence_drop"] <= stop["maximum_reference_confidence_drop"]
     )
@@ -553,22 +721,43 @@ def preservation_failures(config: dict, fixed_report: dict, challenge_report: di
     return failures, confidence
 
 
-def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], preflight_summary: dict) -> None:
+def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], preflight_summary: dict, resume_training: bool = False) -> None:
     global ACTIVE_CONFIG
     require(config["training_authorized"] is True, "Training remains blocked: set training_authorized=true only after explicit approval")
     run_dir = ROOT / "runs" / config["run_name"]
     audit = project_path(config["monitor_output"])
-    require(not run_dir.exists(), "Training output already exists; use a new reviewed run name")
-    require(not audit.exists() or not any(audit.iterdir()), "Monitor output already contains artifacts; use a new reviewed run name")
-    audit.mkdir(parents=True, exist_ok=True)
+    resume_checkpoint = run_dir / "weights/last.pt"
+    previous_summary = None
+    if resume_training:
+        require(run_dir.is_dir() and resume_checkpoint.is_file(), "Resume requires the existing run's last.pt")
+        require((audit / "monitor_summary.json").is_file(), "Resume requires the existing monitor summary")
+        previous_summary = load(audit / "monitor_summary.json")
+        require(previous_summary["config_sha256"] == file_sha256(config_path), "Resume configuration differs from the original run")
+        require(previous_summary["trainer_sha256"] == file_sha256(Path(__file__)), "Resume trainer differs from the original run")
+        require(previous_summary["status"] in ("training", "training_error", "completed_no_passing_checkpoint"), "Run status is not resumable")
+        yolo = YOLO(str(resume_checkpoint))
+    else:
+        require(not run_dir.exists(), "Training output already exists; use --resume-training only for a verified interrupted run")
+        require(not audit.exists() or not any(audit.iterdir()), "Monitor output already contains artifacts; use a new reviewed run name")
+        audit.mkdir(parents=True, exist_ok=True)
     ACTIVE_CONFIG = config
     july_manifest = load(project_path(config["july_manifest"]))
     write(audit / "july_manifest.json", july_manifest)
     july_manifest_hash = file_sha256(audit / "july_manifest.json")
     require(july_manifest_hash == config["july_manifest_sha256"], "Copied July manifest hash changed")
     baseline_reports = {suite: load(project_path(artifact["path"])) for suite, artifact in config["baseline_reports"].items()}
-    initial_state = {name: parameter.detach().cpu().clone() for name, parameter in yolo.model.state_dict().items()}
-    summary = {**preflight_summary, "status": "training", "training_started": True, "started_at_utc": datetime.now(timezone.utc).isoformat(), "epochs": []}
+    baseline_model = YOLO(str(project_path(config["starting_weights"]))).model
+    initial_state = {name: parameter.detach().cpu().clone() for name, parameter in baseline_model.state_dict().items()}
+    pinned_teacher = baseline_model
+    pinned_teacher.eval().requires_grad_(False)
+    if resume_training:
+        assert previous_summary is not None
+        summary = previous_summary
+        summary["status"] = "training"
+        summary.pop("error", None)
+        summary.setdefault("resumed_at_utc", []).append(datetime.now(timezone.utc).isoformat())
+    else:
+        summary = {**preflight_summary, "status": "training", "training_started": True, "started_at_utc": datetime.now(timezone.utc).isoformat(), "epochs": []}
     write(audit / "monitor_summary.json", summary)
 
     def setup(trainer) -> None:
@@ -578,6 +767,13 @@ def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], 
         if loss_config["name"] == "baseline_foreground_floor":
             trainer.model.criterion = BaselineForegroundFloorLoss(trainer.model, tal_topk=loss_config["tal_topk"])
             trainer.ema.ema.criterion = BaselineForegroundFloorLoss(trainer.ema.ema, tal_topk=loss_config["tal_topk"])
+        elif loss_config["name"] == "frozen_teacher_foreground_floor":
+            trainer.model.criterion = FrozenTeacherForegroundFloorLoss(trainer.model, tal_topk=loss_config["tal_topk"])
+            trainer.ema.ema.criterion = ActiveHeadLoss(trainer.ema.ema)
+        elif loss_config["name"] == "pinned_teacher_reviewed_classification":
+            regions = negative_region_map(config)
+            trainer.model.criterion = PinnedTeacherReviewedClassificationLoss(trainer.model, pinned_teacher, loss_config, regions)
+            trainer.ema.ema.criterion = PinnedTeacherReviewedClassificationLoss(trainer.ema.ema, pinned_teacher, loss_config, regions)
         else:
             trainer.model.criterion = ActiveHeadLoss(trainer.model)
             trainer.ema.ema.criterion = ActiveHeadLoss(trainer.ema.ema)
@@ -586,11 +782,30 @@ def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], 
         require(set(actual) == set(expected), "Trainer trainable scope differs from preflight")
         require(trainer.accumulate == config["training"]["gradient_accumulation"], "Gradient accumulation changed")
         actual_groups = {group["param_group"]: group["lr"] for group in trainer.optimizer.param_groups}
-        require(actual_groups == {group["name"]: group["learning_rate"] for group in preflight_summary["optimizer_groups"]}, "Optimizer groups or learning rates changed")
+        expected_groups = {group["name"]: group["learning_rate"] for group in preflight_summary["optimizer_groups"]}
+        require(set(actual_groups) == set(expected_groups), "Optimizer groups changed")
+        if not resume_training:
+            require(actual_groups == expected_groups, "Optimizer learning rates changed")
         trainer.audit_root = audit
         trainer.probe = gradient_probe_tensor(config)
         from active_head_pilot import probe_scores
         trainer.initial_probe_scores = probe_scores(trainer.model, trainer.probe)
+        trainer.sampling_audit = []
+        trainer.objective_audit = []
+
+    def epoch_start(trainer) -> None:
+        sampler = getattr(trainer.train_loader, "sampler", None)
+        if isinstance(sampler, BalancedPageSampler):
+            sampler.set_epoch(int(trainer.epoch))
+            order = sampler.epoch_order()
+            files = [Path(trainer.train_loader.dataset.im_files[index]).name for index in order]
+            roles = ["positive" if index in sampler.positive else "background" for index in order]
+            trainer.sampling_audit.append({"epoch": int(trainer.epoch) + 1, "files": files, "roles": roles})
+
+    def batch_end(trainer) -> None:
+        criterion = getattr(unwrap_model(trainer.model), "criterion", None)
+        if isinstance(criterion, PinnedTeacherReviewedClassificationLoss):
+            trainer.objective_audit.append(dict(criterion.last_diagnostics))
 
     def saved(trainer) -> None:
         epoch = int(trainer.epoch) + 1
@@ -599,8 +814,8 @@ def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], 
         checkpoint_sha256 = file_sha256(checkpoint)
         current = YOLO(str(checkpoint)).model
         changed = [name for name, value in initial_state.items() if not torch.equal(current.state_dict()[name].cpu().half(), value.half())]
-        prefixes = tuple(config["trainable_scope"]["feature_prefixes"] + config["trainable_scope"]["head_prefixes"])
-        require(bool(changed) and all(name.startswith(prefixes) for name in changed), "Checkpoint changed a frozen tensor or changed nothing")
+        allowed = set(scope_parameters(yolo.model, config))
+        require(bool(changed) and set(changed) <= allowed, "Checkpoint changed a frozen tensor or changed nothing")
         def checkpoint_unchanged() -> None:
             require(file_sha256(checkpoint) == checkpoint_sha256, "Checkpoint changed during monitored evaluation")
 
@@ -616,46 +831,65 @@ def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], 
             finally:
                 cache.close()
 
-        fixed_report = cached_evaluation(
-            "fixed_manifest",
-            lambda before_page: run_fixed(checkpoint, project_path(config["fixed_manifest"]), audit / f"epoch_{epoch:02d}_fixed080.json", before_page),
-        )
-        verify_report_checkpoint_sha("fixed", fixed_report, checkpoint_sha256)
-        checkpoint_unchanged()
-        challenge_report = cached_evaluation(
-            "challenge_manifest",
-            lambda before_page: run_challenge(checkpoint, project_path(config["challenge_manifest"]), audit / f"epoch_{epoch:02d}_challenge.json", before_page),
-        )
-        verify_report_checkpoint_sha("challenge", challenge_report, checkpoint_sha256)
-        checkpoint_unchanged()
-        july_report = cached_evaluation(
-            "july_manifest",
-            lambda before_page: evaluate_july(checkpoint, july_manifest, july_manifest_hash, audit / f"epoch_{epoch:02d}_july.json", before_page),
-        )
-        verify_report_checkpoint_sha("july", july_report, checkpoint_sha256)
-        checkpoint_unchanged()
-        target_report = evaluate_target(checkpoint, config, audit / f"epoch_{epoch:02d}_target.json", checkpoint_sha256)
+        training = config["training"]
+        target_due = epoch % training.get("target_evaluation_period", 1) == 0
+        full_due = epoch % training.get("full_evaluation_period", 1) == 0 or epoch == training["epochs"]
+        require(target_due, "Every saved checkpoint must run the targeted diagnostic")
+        target_path = audit / f"epoch_{epoch:02d}_target.json"
+        target_report = evaluate_target(checkpoint, config, target_path, checkpoint_sha256)
         verify_report_checkpoint_sha("target", target_report, checkpoint_sha256)
         checkpoint_unchanged()
-        failures, confidence = preservation_failures(config, fixed_report, challenge_report, july_report, baseline_reports)
-        promoted = not failures and target_report["passed"]
-        report_paths = {
-            "fixed": audit / f"epoch_{epoch:02d}_fixed080.json",
-            "challenge": audit / f"epoch_{epoch:02d}_challenge.json",
-            "july": audit / f"epoch_{epoch:02d}_july.json",
-            "target": audit / f"epoch_{epoch:02d}_target.json",
-        }
-        reports = {"fixed": fixed_report, "challenge": challenge_report, "july": july_report, "target": target_report}
+        reports = {"target": target_report}
+        report_paths = {"target": target_path}
+        failures = None
+        confidence = None
+        if full_due:
+            fixed_report = cached_evaluation(
+                "fixed_manifest",
+                lambda before_page: run_fixed(checkpoint, project_path(config["fixed_manifest"]), audit / f"epoch_{epoch:02d}_fixed080.json", before_page),
+            )
+            verify_report_checkpoint_sha("fixed", fixed_report, checkpoint_sha256)
+            checkpoint_unchanged()
+            challenge_report = cached_evaluation(
+                "challenge_manifest",
+                lambda before_page: run_challenge(checkpoint, project_path(config["challenge_manifest"]), audit / f"epoch_{epoch:02d}_challenge.json", before_page),
+            )
+            verify_report_checkpoint_sha("challenge", challenge_report, checkpoint_sha256)
+            checkpoint_unchanged()
+            july_report = cached_evaluation(
+                "july_manifest",
+                lambda before_page: evaluate_july(checkpoint, july_manifest, july_manifest_hash, audit / f"epoch_{epoch:02d}_july.json", before_page),
+            )
+            verify_report_checkpoint_sha("july", july_report, checkpoint_sha256)
+            checkpoint_unchanged()
+            failures, confidence = preservation_failures(config, fixed_report, challenge_report, july_report, baseline_reports)
+            reports.update({"fixed": fixed_report, "challenge": challenge_report, "july": july_report})
+            report_paths.update({
+                "fixed": audit / f"epoch_{epoch:02d}_fixed080.json",
+                "challenge": audit / f"epoch_{epoch:02d}_challenge.json",
+                "july": audit / f"epoch_{epoch:02d}_july.json",
+            })
+        promoted = full_due and not failures and target_report["passed"]
         report_artifacts = {
             suite: {"path": relative(path), "sha256": file_sha256(path), "totals": reports[suite]["totals"]}
             for suite, path in report_paths.items()
         }
-        record = {"epoch": epoch, "checkpoint": relative(checkpoint), "checkpoint_sha256": checkpoint_sha256, "changed_tensors": len(changed), "reports": report_artifacts, "preservation_failures": failures, "confidence_preservation": confidence, "target": target_report["totals"], "promotion_passed": promoted}
+        sampler_records = [record for record in getattr(trainer, "sampling_audit", []) if record["epoch"] == epoch]
+        objective_records = getattr(trainer, "objective_audit", [])
+        objective_totals = {
+            key: sum(int(record.get(key, 0)) for record in objective_records)
+            for key in ("preservation_groups", "recovery_groups", "rejection_groups", "explicit_negative_regions")
+        }
+        record = {"epoch": epoch, "checkpoint": relative(checkpoint), "checkpoint_sha256": checkpoint_sha256, "changed_tensors": len(changed), "full_evaluation": full_due, "reports": report_artifacts, "preservation_failures": failures, "confidence_preservation": confidence, "target": target_report["totals"], "objective_groups": objective_totals, "sampling": sampler_records[-1] if sampler_records else None, "promotion_passed": promoted}
         summary["epochs"].append(record)
-        if failures and config["stopping"]["stop_immediately_on_preservation_failure"]:
+        if full_due and failures and config["stopping"]["stop_immediately_on_preservation_failure"]:
             trainer.stop = True
             summary["status"] = "stopped_preservation_failure"
         elif promoted and config["stopping"]["stop_when_all_promotion_gates_pass"]:
+            candidate = Path(trainer.wdir) / "fixed080_candidate.pt"
+            shutil.copy2(checkpoint, candidate)
+            require(file_sha256(candidate) == checkpoint_sha256, "Promoted candidate copy changed")
+            record["promoted_candidate"] = {"path": relative(candidate), "sha256": checkpoint_sha256}
             trainer.stop = True
             summary["status"] = "passed_all_promotion_gates"
         write(audit / "monitor_summary.json", summary)
@@ -663,20 +897,22 @@ def launch(config_path: Path, config: dict, yolo: YOLO, train_hashes: set[str], 
         gc.collect()
 
     yolo.add_callback("on_pretrain_routine_end", setup)
+    yolo.add_callback("on_train_epoch_start", epoch_start)
+    yolo.add_callback("on_train_batch_end", batch_end)
     yolo.add_callback("on_model_save", saved)
     training = config["training"]
     try:
         yolo.train(
             trainer=DifferentialFeatureTrainer, data=str(project_path(config["dataset"])), project=str(ROOT / "runs"), name=config["run_name"], exist_ok=False,
             epochs=training["epochs"], device=training["device"], imgsz=training["image_size"], batch=training["batch"], workers=training["workers"],
-            pretrained=training["pretrained"], resume=training["resume"], optimizer=config["optimizer"]["name"], lr0=config["optimizer"]["head_learning_rate"],
+            pretrained=training["pretrained"], resume=str(resume_checkpoint) if resume_training else training["resume"], optimizer=config["optimizer"]["name"], lr0=config["optimizer"]["head_learning_rate"],
             lrf=training["final_learning_rate_fraction"], momentum=config["optimizer"]["beta1"], weight_decay=config["optimizer"]["weight_decay"], nbs=training["nominal_batch_size"],
             warmup_epochs=training["warmup_epochs"], warmup_momentum=training["warmup_momentum"], warmup_bias_lr=training["warmup_bias_lr"], freeze=training["freeze"],
             mosaic=training["mosaic"], close_mosaic=training["close_mosaic"], scale=training["scale"], translate=training["translate"], degrees=training["degrees"],
             shear=training["shear"], perspective=training["perspective"], fliplr=training["horizontal_flip"], flipud=training["vertical_flip"], hsv_h=training["hsv_h"],
             hsv_s=training["hsv_s"], hsv_v=training["hsv_v"], bgr=training["bgr"], mixup=training["mixup"], cutmix=training["cutmix"], copy_paste=training["copy_paste"],
             multi_scale=training["multi_scale"], amp=training["amp"], compile=training["compile"], cache=training["cache"], rect=training["rectangular_batches"],
-            val=True, split="val", plots=False, save=True, save_period=training["save_period"], patience=training["patience"], seed=training["seed"], deterministic=training["deterministic"], single_cls=training["single_class"],
+            val=training.get("native_validation", True), split="val", plots=False, save=True, save_period=training["save_period"], patience=training["patience"], seed=training["seed"], deterministic=training["deterministic"], single_cls=training["single_class"],
         )
         if summary["status"] == "training":
             summary["status"] = "completed_no_passing_checkpoint"
@@ -702,12 +938,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(DEFAULT_CONFIG.relative_to(ROOT)))
     parser.add_argument("--start-training", action="store_true", help="Start only when the reviewed config also authorizes training")
+    parser.add_argument("--resume-training", action="store_true", help="Resume the same hash-verified run from its last.pt")
     parser.add_argument("--skip-gradient-check", action="store_true", help="Use only for fast repeated integrity checks")
     args = parser.parse_args()
     config_path = project_path(args.config)
     config, yolo, train_hashes, summary = preflight(config_path, run_gradient_check=not args.skip_gradient_check)
-    if args.start_training:
-        launch(config_path, config, yolo, train_hashes, summary)
+    require(not (args.start_training and args.resume_training), "Choose either --start-training or --resume-training")
+    if args.start_training or args.resume_training:
+        launch(config_path, config, yolo, train_hashes, summary, resume_training=args.resume_training)
     else:
         write(project_path(config["preflight_output"]), summary)
         print(json.dumps(summary, indent=2))

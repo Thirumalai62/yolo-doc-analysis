@@ -1,0 +1,97 @@
+{
+  "experiment": "r7_complete_release_guarded_trust_region_correction",
+  "run_name": "legal_notice_v17_guarded_trust_region_cpu_r1",
+  "starting_weights": "runs/legal_notice_v8_protected_head_cpu_r7_paa_analogue/weights/candidate.pt",
+  "starting_weights_sha256": "2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76",
+  "ultralytics_version": "8.4.146",
+  "dataset_root": "dataset_v11_consolidated",
+  "dataset_manifest": "regression/legal_notice_v11_dataset_manifest.json",
+  "dataset_manifest_sha256": "1cada5b9d563dfed84b7a4d93591dce39d6d666ef4bef8c8d856d105c90fc4db",
+  "target_manifest": "output/correction_data/legal_notice_v10_targeted_correction/manifest.json",
+  "target_manifest_sha256": "bc7bbb69e2283195370c7689f27d33cd341829a5496de88aa0438b48ff0a2dd7",
+  "release_inventory": "regression/legal_notice_v15_acceptance_inventory.json",
+  "release_inventory_sha256": "b2ba84fa560e3702707e8dd41503cab2fc909ec79bcda9e26e42b355c5e5b3bd",
+  "pinned_artifacts": {
+    "release_config": {"path": "regression/legal_notice_v17_release_config.json", "sha256": "bc4b2be0838dfffc0e30c8fdbdcde3fdffc3f4c753285743cd33add01cd19879"},
+    "r7_complete_baseline": {"path": "output/regression_audit/legal_notice_v17_r7_complete_baseline/release_summary.json", "sha256": "31a464334816c3b30085856b18d7fc48c9f541a5aa5219a8b1377ab95ff118dd"}
+  },
+  "prepared_manifest": "output/regression_audit/legal_notice_v17_guarded_trust_region_cpu_r1/data_manifest.json",
+  "cache": "output/regression_audit/legal_notice_v17_guarded_trust_region_cpu_r1/train_cache",
+  "audit_root": "output/regression_audit/legal_notice_v17_guarded_trust_region_cpu_r1",
+  "run_root": "runs/legal_notice_v17_guarded_trust_region_cpu_r1",
+  "inventory_counts": {"unique_pages": 382, "valid_notices": 1294, "explicit_negative_regions": 45},
+  "deployment": {
+    "confidence": 0.8,
+    "image_size": 1280,
+    "device": "cpu",
+    "render_dpi": 200,
+    "nms_iou": 0.7,
+    "max_detections": 300,
+    "precision": "fp32",
+    "batch": 1,
+    "end2end": false
+  },
+  "trainable_scope": {
+    "prefix": "model.23.cv3.",
+    "tensors": 42,
+    "parameters": 550659,
+    "batch_norm_running_statistics": "frozen"
+  },
+  "assignment": {
+    "positive_minimum_iou": 0.5,
+    "negative_maximum_valid_iou": 0.1,
+    "negative_region_overlap": 0.5
+  },
+  "objectives": {
+    "acceptance_probability": 0.8,
+    "preservation_probability": 0.805,
+    "maximum_preservation_drop": 0.002,
+    "recovery_probability": 0.805,
+    "negative_ceiling_probability": 0.49,
+    "background_ceiling_probability": 0.79,
+    "weights": {
+      "preservation": 1.0,
+      "recovery": 1.0,
+      "explicit_rejection": 1.0,
+      "background_rejection": 1.0
+    }
+  },
+  "optimizer": {
+    "name": "minimum_norm_guarded_trust_region",
+    "initial_radius": 0.005,
+    "minimum_radius": 0.000125,
+    "maximum_radius": 0.02,
+    "growth_factor": 1.5,
+    "shrink_factor": 0.5,
+    "maximum_consecutive_rejections": 4
+  },
+  "budget": {
+    "diagnostic_proposals": 12,
+    "fit_proposals": 40,
+    "maximum_full_evaluation_bundles": 2,
+    "maximum_model_compute_seconds": 7200,
+    "reserved_seconds_per_proposal": 600
+  },
+  "diagnostic_gate": {
+    "minimum_accepted_updates": 3,
+    "minimum_recovery_shortfall_reduction": 0.1,
+    "minimum_explicit_negative_excess_reduction": 0.1,
+    "require_every_recovery_improved": true,
+    "require_every_target_negative_not_worse": true
+  },
+  "evaluation_manifests": {
+    "fixed": {"path": "regression/fixed080_manifest.json", "sha256": "f8fb3ae50ef1e886a1df42834b6edbc7e27e675fb4197f35a7e03d2e251575e0"},
+    "challenge": {"path": "regression/full_category_challenge_manifest.json", "sha256": "1b39707d6ea283c5b87259edb903e51787d5ba1161ae75a6214162fc9dea91f0"},
+    "july": {"path": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/july_manifest.json", "sha256": "c4391a9e24ffdc384a36ef8eca91adad9d9cab932d0fc9eee9d72e1352b3b881"},
+    "historical": {"path": "output/regression_audit/legal_notice_v9_preflight/historical_manifest.json", "sha256": "8a0fa166a71d786fa5a3cb1bcbac94f00bbbce1e11f32723cecdc68edbd8f557"}
+  },
+  "baseline_reports": {
+    "fixed": {"path": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/fixed080.json", "sha256": "9bc7720deefe7b8c420cca285d6ae9b1f9a75a1e1bee86097c19c5e45d6e788e"},
+    "challenge": {"path": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/challenge.json", "sha256": "a4a487498cecb8acdf87ac76f8bbe2cc8e581fdee60cc4aac232d118b174ffca"},
+    "july": {"path": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/july.json", "sha256": "9122644e90219c6235a14b15a8a6ccdbb736b39f456da8f18fc6f91c3a947fe7"},
+    "reviewed": {"path": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/reviewed_recovery_verification.json", "sha256": "ae75b42f968cad366e96e74701f03a14c67f9b639d4b975038deab6cc8a15afd"}
+  },
+  "training_authorization_required": true,
+  "training_authorized": true,
+  "authorization_status": "Authorized by the user on 2026-09-17 to proceed after completing the unified release evaluator and safety infrastructure. This configuration permits one 12-proposal diagnostic; the 40-proposal fit remains conditional on the diagnostic gate."
+}

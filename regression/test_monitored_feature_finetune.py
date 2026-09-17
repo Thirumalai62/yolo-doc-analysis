@@ -2,8 +2,12 @@
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+
+import numpy as np
+import torch
 
 import monitored_feature_finetune as monitored
 from monitored_feature_finetune import confidence_preservation
@@ -41,6 +45,12 @@ class ConfidenceGateTests(unittest.TestCase):
         current = challenge_report({"a": 0.95})
         result = confidence_preservation(self.config, "challenge", self.baseline, current)
         self.assertFalse(result["passed"])
+
+    def test_newly_recovered_reference_does_not_fail_preservation(self):
+        current = challenge_report({"a": 0.95, "b": 0.90, "recovered": 0.88})
+        result = confidence_preservation(self.config, "challenge", self.baseline, current)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["current_references"], 3)
 
 
 class EvaluationIntegrityTests(unittest.TestCase):
@@ -108,6 +118,60 @@ class EvaluationIntegrityTests(unittest.TestCase):
         with patch.object(monitored, "load", return_value={"reviews": []}), patch.object(monitored, "confidence_preservation", return_value=passing_confidence):
             failures, _ = monitored.preservation_failures(config, fixed_report, challenge_report, july_report, baselines)
         self.assertIn("fixed_preservation", failures)
+
+    def test_reviewed_pilot_config_pins_scope_and_zero_exclusion_gates(self):
+        config = monitored.load(monitored.ROOT / "regression/legal_notice_v15_reviewed_cls_pilot_config.json")
+        monitored.validate_config(config)
+        self.assertEqual(config["trainable_scope"]["head_prefixes"], ["model.23.cv3."])
+        self.assertEqual(config["stopping"]["fixed_max_excluded_accepted"], 0)
+        self.assertEqual(config["training"]["full_evaluation_period"], 1)
+
+    def test_negative_region_map_contains_all_eight_reviewed_regions(self):
+        config = monitored.load(monitored.ROOT / "regression/legal_notice_v15_reviewed_cls_pilot_config.json")
+        regions = monitored.negative_region_map(config)
+        self.assertEqual(sum(map(len, regions.values())), 8)
+
+
+class BalancedSamplerTests(unittest.TestCase):
+    class Dataset:
+        labels = [{"cls": np.ones((1, 1))} for _ in range(4)] + [{"cls": np.empty((0, 1))} for _ in range(6)]
+
+    def test_order_is_reproducible_per_epoch_and_changes_between_epochs(self):
+        first = monitored.BalancedPageSampler(self.Dataset(), seed=7)
+        second = monitored.BalancedPageSampler(self.Dataset(), seed=7)
+        self.assertEqual(first.epoch_order(), second.epoch_order())
+        first.set_epoch(1)
+        self.assertNotEqual(first.epoch_order(), second.epoch_order())
+        self.assertEqual(set(first.epoch_order()), set(range(10)))
+
+    def test_positive_and_background_pages_are_spread(self):
+        sampler = monitored.BalancedPageSampler(self.Dataset(), seed=0)
+        roles = [index < 4 for index in sampler.epoch_order()]
+        self.assertTrue(any(roles[:5]))
+        self.assertTrue(any(not role for role in roles[:5]))
+        self.assertTrue(any(roles[5:]))
+        self.assertTrue(any(not role for role in roles[5:]))
+
+
+class CheckpointSerializationTests(unittest.TestCase):
+    def test_training_criteria_are_detached_before_base_serializer_runs(self):
+        trainer = object.__new__(monitored.DifferentialFeatureTrainer)
+        trainer.model = torch.nn.Linear(2, 1)
+        trainer.model.criterion = object()
+        trainer.ema = SimpleNamespace(ema=torch.nn.Linear(2, 1))
+        trainer.ema.ema.criterion = object()
+        model_criterion = trainer.model.criterion
+        ema_criterion = trainer.ema.ema.criterion
+
+        def serializer(instance):
+            self.assertIsNone(instance.model.criterion)
+            self.assertIsNone(instance.ema.ema.criterion)
+            return "saved"
+
+        with patch.object(monitored.ActiveHeadTrainer, "save_model", serializer):
+            self.assertEqual(trainer.save_model(), "saved")
+        self.assertIs(trainer.model.criterion, model_criterion)
+        self.assertIs(trainer.ema.ema.criterion, ema_criterion)
 
 
 if __name__ == "__main__":

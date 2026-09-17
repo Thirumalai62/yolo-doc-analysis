@@ -1,0 +1,27 @@
+{
+  "experiment": "r7_guarded_minimum_norm_directional_correction",
+  "run_name": "legal_notice_v16_guarded_directional_cpu_r1",
+  "base_config": "regression/legal_notice_v16_guarded_config.json",
+  "base_config_sha256": "e275b9bd7c81834fbb957cd897555b0c71f4f488d44ab7cea23b58c7cb204c5a",
+  "cache_manifest": "output/regression_audit/legal_notice_v16_guarded_cls_cpu_r1/train_cache/cache_manifest.json",
+  "cache_manifest_sha256": "52342cb7baa6c5e59380cb0e08ec772c265daf8792584ca3e8487a1bc4d0101e",
+  "prior_diagnostic": "output/regression_audit/legal_notice_v16_guarded_cls_cpu_r1/fit_progress.json",
+  "prior_diagnostic_status": "stopped_repeated_rejection",
+  "prior_proposals_consumed": 10,
+  "run_root": "runs/legal_notice_v16_guarded_directional_cpu_r1",
+  "audit_root": "output/regression_audit/legal_notice_v16_guarded_directional_cpu_r1",
+  "optimizer": {
+    "name": "minimum_norm_guarded_direction",
+    "learning_rate": 0.0005,
+    "minimum_learning_rate": 0.0000001,
+    "halve_learning_rate_on_rejection": true,
+    "maximum_consecutive_rejections": 10
+  },
+  "budget": {
+    "remaining_diagnostic_proposals": 10,
+    "fit_proposals": 100,
+    "maximum_model_compute_seconds_including_prior": 7200
+  },
+  "training_authorized": true,
+  "authorization_status": "Implementation correction within the user-authorized V16 plan: preserve the pinned R7 data, scope, objectives, safety guards, and total budget while replacing an empirically conflicting aggregate Adam direction with the verified common minimum-norm direction."
+}
