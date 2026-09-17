@@ -234,7 +234,7 @@ def prediction_record(box) -> dict:
     }
 
 
-def run_predictions(weights: Path, manifest: dict) -> dict:
+def run_predictions(weights: Path, manifest: dict, before_page=None) -> dict:
     sys.path.insert(0, str(ROOT))
     import main as application
 
@@ -243,6 +243,8 @@ def run_predictions(weights: Path, manifest: dict) -> dict:
     application.require_legal_notice_model(model)
     pages = []
     for index, page in enumerate(manifest["pages"], start=1):
+        if before_page is not None:
+            before_page(page)
         result = model.predict(
             str(project_path(page["image"])),
             conf=manifest["acceptance_confidence"],

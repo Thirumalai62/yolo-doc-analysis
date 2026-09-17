@@ -159,12 +159,14 @@ def build_july(train_hashes):
             "strict_gates": {"valid_missed": 0, "excluded_accepted_regions": 0, "unreviewed_accepted": 0}}
 
 
-def evaluate_july(weights, manifest, manifest_hash, output):
+def evaluate_july(weights, manifest, manifest_hash, output, before_page=None):
     model = YOLO(str(weights))
     require(not model.model.end2end, "Saved checkpoint changed inference mode")
     weight_hash = fixed.file_sha256(weights)
     records, targets = [], []
     for page in manifest["pages"]:
+        if before_page is not None:
+            before_page(page)
         image = ROOT / page["image"]
         require(fixed.file_sha256(image) == page["image_sha256"], "July image changed")
         result = model.predict(str(image), conf=0.8, imgsz=1280, device="cpu", verbose=False, save=False)[0]

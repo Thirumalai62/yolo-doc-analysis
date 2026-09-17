@@ -257,7 +257,7 @@ def prediction_record(box) -> dict:
     }
 
 
-def run_candidate(weights: Path, manifest: dict) -> dict:
+def run_candidate(weights: Path, manifest: dict, before_page=None) -> dict:
     sys.path.insert(0, str(ROOT))
     import main as application
 
@@ -266,6 +266,8 @@ def run_candidate(weights: Path, manifest: dict) -> dict:
     application.require_legal_notice_model(model)
     pages = []
     for index, page in enumerate(manifest["pages"], start=1):
+        if before_page is not None:
+            before_page(page)
         image_path = project_path(page["image"])
         if not image_path.is_file() or file_sha256(image_path) != page["image_sha256"]:
             raise SystemExit(f"Regression image is missing or changed: {image_path}")
@@ -460,6 +462,7 @@ def check_candidate(
     output_path: Path,
     enforce: bool,
     allow_unverified: bool,
+    verify_images: bool = True,
 ) -> dict:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     validate_manifest(manifest)
@@ -485,7 +488,7 @@ def check_candidate(
     page_results = []
     for page in manifest["pages"]:
         image_path = project_path(page["image"])
-        if not image_path.is_file() or file_sha256(image_path) != page["image_sha256"]:
+        if verify_images and (not image_path.is_file() or file_sha256(image_path) != page["image_sha256"]):
             raise SystemExit(f"Regression image is missing or changed: {image_path}")
         predictions = candidate_pages[normalized_path(page["image"])]["predictions"]
         accepted = [prediction for prediction in predictions if prediction["confidence"] >= ACCEPTANCE_CONFIDENCE]

@@ -229,9 +229,9 @@ def write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
 
-def run_fixed(checkpoint: Path, manifest_path: Path, output_path: Path) -> dict:
+def run_fixed(checkpoint: Path, manifest_path: Path, output_path: Path, before_page=None) -> dict:
     manifest = load_json(manifest_path)
-    predictions = fixed_acceptance.run_candidate(checkpoint, manifest)
+    predictions = fixed_acceptance.run_candidate(checkpoint, manifest, before_page=before_page)
     prediction_path = output_path.with_suffix(".predictions.json")
     write_json(prediction_path, predictions)
     artifact = {
@@ -245,12 +245,13 @@ def run_fixed(checkpoint: Path, manifest_path: Path, output_path: Path) -> dict:
         output_path,
         enforce=False,
         allow_unverified=False,
+        verify_images=False,
     )
 
 
-def run_challenge(checkpoint: Path, manifest_path: Path, output_path: Path) -> dict:
+def run_challenge(checkpoint: Path, manifest_path: Path, output_path: Path, before_page=None) -> dict:
     manifest = load_json(manifest_path)
-    predictions = challenge.run_predictions(checkpoint, manifest)
+    predictions = challenge.run_predictions(checkpoint, manifest, before_page=before_page)
     predictions["manifest_sha256"] = fixed_acceptance.file_sha256(manifest_path)
     prediction_path = output_path.with_suffix(".predictions.json")
     write_json(prediction_path, predictions)

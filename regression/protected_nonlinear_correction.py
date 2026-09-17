@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 from ultralytics import YOLO
 
-from protected_correction import ROOT, load, write, verify, nonlinear_logits, objective
+from protected_correction import ROOT, load, write, verify, nonlinear_logits, objective, resolve_config
 import fixed080_acceptance as fixed
 
 
@@ -13,10 +13,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="regression/protected_correction_r4_config.json")
     parser.add_argument("--recover-report", action="store_true", help="Rebuild an interrupted run's report without training")
+    parser.add_argument("--start-training", action="store_true", help="Explicitly authorize the frozen training run")
     args = parser.parse_args()
     config_path = ROOT / args.config
-    child = load(config_path)
-    config = {**load(ROOT / child["base_config"]), **child}
+    config = resolve_config(config_path)
+    if not args.recover_report and config.get("training_authorization_required") and not args.start_training:
+        raise SystemExit("Training is not authorized; review the frozen config and rerun with --start-training.")
     assert config["feature_layer"] == "pre_pointwise"
     torch.set_num_threads(4)
     wrapper = verify(config)
@@ -29,7 +31,9 @@ def main():
         assert fixed.file_sha256(config_path) == manifest["config_sha256"]
     else:
         source_config = load(cache_root / "config.json")
-        for key in ("feature_layer", "starting_weights_sha256", "development_sha256", "positive_corrections", "negative_regions_xyxyn", "extra_train_pages"):
+        for key in ("feature_layer", "starting_weights_sha256", "development_sha256", "positive_corrections",
+                    "negative_regions_xyxyn", "extra_train_pages", "correction_overlay_manifest",
+                    "correction_overlay_manifest_sha256"):
             assert source_config.get(key) == config.get(key)
         if not audit.exists():
             audit.mkdir(parents=True)
@@ -86,7 +90,11 @@ def main():
         with torch.no_grad():
             for name, p in active.items():
                 p.copy_(warm[name])
-    optimizer = torch.optim.LBFGS(list(active.values()), lr=1, max_iter=config["max_iterations"], history_size=10, line_search_fn="strong_wolfe")
+    optimizer = torch.optim.LBFGS(
+        list(active.values()), lr=1, max_iter=config["max_iterations"],
+        max_eval=config.get("max_evaluations", config["max_iterations"]),
+        history_size=10, line_search_fn="strong_wolfe",
+    )
     history = []
 
     def scores():
@@ -105,6 +113,7 @@ def main():
         return loss
 
     optimizer.step(closure)
+    assert len(history) <= config.get("max_evaluations", config["max_iterations"]), "Optimizer exceeded evaluation budget"
     target_scores = []
     with torch.no_grad():
         for scale, (bucket, z) in enumerate(zip(cache, scores())):
@@ -122,7 +131,10 @@ def main():
                 "correction": {"config": config, "cache_manifest_sha256": fixed.file_sha256(cache_root / "cache_manifest.json")}}, run / "weights/candidate.pt")
     reloaded = YOLO(str(run / "weights/candidate.pt")).model
     assert not reloaded.end2end and all(torch.equal(model.state_dict()[n], reloaded.state_dict()[n]) for n in original)
+    optimizer_state = optimizer.state[next(iter(active.values()))]
     write(audit / "fit_report.json", {"history": history, "target_scores": target_scores, "changed_tensors": changed,
+                                     "optimizer_invocations": 1, "optimizer_iterations": optimizer_state.get("n_iter"),
+                                     "closure_evaluations": len(history),
                                      "candidate_sha256": fixed.file_sha256(run / "weights/candidate.pt")})
     print({"initial_loss": history[0], "final_loss": history[-1], "target_scores": target_scores})
 

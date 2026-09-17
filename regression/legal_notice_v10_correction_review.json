@@ -1,0 +1,55 @@
+{
+  "review_status": "approved_from_user_summary_and_cvat",
+  "scope": "Targeted September 1-8 correction inputs. Regions are excluded from legal_notice; all CVAT boxes on mixed pages are valid notices to preserve.",
+  "pages": [
+    {
+      "issue": "albayan_2026-09-01",
+      "page": 8,
+      "category": "unrelated_editorial_or_news",
+      "negative_regions_xyxy": [[40, 2730, 620, 3290]],
+      "baseline_evidence": "output/legal_notices/v8_albayan_2026-09-01/detections.json"
+    },
+    {
+      "issue": "albayan_2026-09-02",
+      "page": 1,
+      "category": "header_or_editorial_teaser",
+      "negative_regions_xyxy": [[35, 890, 620, 1450], [400, 130, 1170, 610]],
+      "baseline_evidence": "output/legal_notices/v8_albayan_2026-09-02/detections.json"
+    },
+    {
+      "issue": "albayan_2026-09-03",
+      "page": 30,
+      "category": "vehicle_auction_or_disposal",
+      "negative_regions_xyxy": [[40, 285, 2295, 1240]],
+      "baseline_evidence": "output/legal_notices/v8_albayan_2026-09-03/detections.json"
+    },
+    {
+      "issue": "albayan_2026-09-07",
+      "page": 2,
+      "category": "unrelated_editorial_or_news",
+      "negative_regions_xyxy": [[90, 850, 745, 3400]],
+      "baseline_evidence": "output/legal_notices/albayan_2026-09-07/detections.json"
+    },
+    {
+      "issue": "albayan_2026-09-08",
+      "page": 32,
+      "category": "vehicle_auction_or_disposal",
+      "negative_regions_xyxy": [[55, 2600, 2290, 3405]],
+      "baseline_evidence": "output/legal_notices/albayan_2026-09-08/detections.json"
+    },
+    {
+      "issue": "khaleejtimes_2026-09-07",
+      "page": 4,
+      "category": "procurement_tender_or_rfp",
+      "negative_regions_xyxy": [[70, 3250, 1570, 4070]],
+      "baseline_evidence": "output/legal_notices/khaleejtimes_2026-09-07/detections.json"
+    },
+    {
+      "issue": "khaleejtimes_2026-09-08",
+      "page": 7,
+      "category": "unrelated_editorial_or_news",
+      "negative_regions_xyxy": [[1110, 220, 2315, 1780]],
+      "baseline_evidence": "output/legal_notices/khaleejtimes_2026-09-08/detections.json"
+    }
+  ]
+}

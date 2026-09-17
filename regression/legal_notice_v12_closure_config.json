@@ -1,0 +1,45 @@
+{
+  "run_name": "legal_notice_v12_constrained_closure_r4",
+  "audit_root": "output/regression_audit/legal_notice_v12_constrained_closure_r4",
+  "run_root": "runs/legal_notice_v12_constrained_closure_r4",
+  "starting_weights": "runs/legal_notice_v8_protected_head_cpu_r7_paa_analogue/weights/candidate.pt",
+  "starting_weights_sha256": "2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76",
+  "warm_start_weights": "runs/legal_notice_v10_targeted_correction_r2/weights/candidate.pt",
+  "warm_start_weights_sha256": "7e2c854cc9b31153ec0e523703d31266b3a8b4885e8ee984e1259e03b9229237",
+  "ultralytics_version": "8.4.146",
+  "fixed_manifest": "regression/fixed080_manifest.json",
+  "fixed_manifest_sha256": "f8fb3ae50ef1e886a1df42834b6edbc7e27e675fb4197f35a7e03d2e251575e0",
+  "challenge_manifest": "regression/full_category_challenge_manifest.json",
+  "challenge_manifest_sha256": "1b39707d6ea283c5b87259edb903e51787d5ba1161ae75a6214162fc9dea91f0",
+  "july_manifest": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue/july_manifest.json",
+  "july_manifest_sha256": "c4391a9e24ffdc384a36ef8eca91adad9d9cab932d0fc9eee9d72e1352b3b881",
+  "target_manifest": "output/correction_data/legal_notice_v10_targeted_correction/manifest.json",
+  "target_manifest_sha256": "bc7bbb69e2283195370c7689f27d33cd341829a5496de88aa0438b48ff0a2dd7",
+  "semantic_extra_reviews": "regression/protected_correction_extra_reviews.json",
+  "semantic_extra_reviews_sha256": "f83686aded7eceae3f10abf2b39dd6c223768172c3f7967dc291ab72775b66d6",
+  "deployment": {"confidence": 0.8, "image_size": 1280, "render_dpi": 200, "device": "cpu"},
+  "constraints": {
+    "minimum_valid_probability": 0.805,
+    "maximum_valid_probability_drop": 0.003,
+    "negative_ceiling_probability": 0.49,
+    "logit_feasibility_tolerance": 0.0001
+  },
+  "optimizer": {
+    "name": "LBFGS",
+    "learning_rate": 0.5,
+    "max_iterations": 400,
+    "max_evaluations": 500,
+    "history_size": 20,
+    "positive_constraint_weight": 1000.0,
+    "negative_constraint_weight": 100.0,
+    "ridge_weight": 0.000001
+  },
+  "required_guard_ids": [
+    "albayan_2026-09-09_p0034_v3_013",
+    "gulftoday_2026-09-09_p0012_v3_009",
+    "khaleejtimes_2026-09-09_p0014_v3_005"
+  ],
+  "training_authorization_required": true,
+  "training_authorized": false,
+  "authorization_status": "Authorization consumed by the R4 closure fit. Candidate SHA-256 0abf06afea653cf82a88d39f6838d1a9ee55dd8d5c7b84692cdbe91a4cf548ce failed full-image release gates and is rejected; no rerun is authorized."
+}

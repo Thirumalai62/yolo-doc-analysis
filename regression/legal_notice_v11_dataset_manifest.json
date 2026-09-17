@@ -1,0 +1,258 @@
+{
+  "name": "legal_notice_v11_consolidated",
+  "status": "prepared_training_not_authorized",
+  "created_at_utc": "2026-09-16T15:47:34.873207+00:00",
+  "config": "regression/legal_notice_v11_dataset_config.json",
+  "config_sha256": "af2db98fc933335e7e6933a15f6dad42b9c6831c1bf5aadbb78c5b647e6f5716",
+  "source_dataset": "dataset_v5_corrected",
+  "source_dataset_sha256_before": "639a294efc01ef5b360a92f9aef55d3c41d6bb469507dab48cecf895b5225c5b",
+  "source_dataset_sha256_after": "639a294efc01ef5b360a92f9aef55d3c41d6bb469507dab48cecf895b5225c5b",
+  "dataset": "dataset_v11_consolidated",
+  "dataset_sha256": "455abfdd6be91ad9823cf8008b398f482f786c937d1010592718691a0e450cca",
+  "counts": {
+    "train": {
+      "images": 91,
+      "label_files": 91,
+      "boxes": 324
+    },
+    "val": {
+      "images": 28,
+      "label_files": 28,
+      "boxes": 162
+    },
+    "test": {
+      "images": 30,
+      "label_files": 30,
+      "boxes": 267
+    }
+  },
+  "sampling": {
+    "unique_pages": 91,
+    "epoch_samples": 109,
+    "categories": {
+      "standard": {
+        "unique_pages": 78,
+        "epoch_samples": 78
+      },
+      "unrelated_editorial_or_news": {
+        "unique_pages": 3,
+        "epoch_samples": 9
+      },
+      "header_or_editorial_teaser": {
+        "unique_pages": 1,
+        "epoch_samples": 3
+      },
+      "vehicle_auction_or_disposal_mixed": {
+        "unique_pages": 2,
+        "epoch_samples": 4
+      },
+      "valid_gulf_table_preservation": {
+        "unique_pages": 3,
+        "epoch_samples": 6
+      },
+      "procurement_tender_or_rfp": {
+        "unique_pages": 4,
+        "epoch_samples": 9
+      }
+    }
+  },
+  "split_issues": {
+    "train": [
+      "albayan_2026-08-14",
+      "albayan_2026-08-17",
+      "albayan_2026-08-18",
+      "albayan_2026-08-20",
+      "albayan_2026-08-31",
+      "albayan_2026-09-01",
+      "albayan_2026-09-02",
+      "albayan_2026-09-03",
+      "albayan_2026-09-07",
+      "albayan_2026-09-08",
+      "alfajr_2026-08-14",
+      "alfajr_2026-09-01",
+      "alfajr_2026-09-02",
+      "gulftoday_2026-08-11",
+      "gulftoday_2026-08-12",
+      "gulftoday_2026-08-14",
+      "gulftoday_2026-08-21",
+      "gulftoday_2026-08-31",
+      "gulftoday_2026-09-01",
+      "gulftoday_2026-09-02",
+      "khaleejtimes_2026-08-10",
+      "khaleejtimes_2026-08-14",
+      "khaleejtimes_2026-08-17",
+      "khaleejtimes_2026-08-18",
+      "khaleejtimes_2026-08-24",
+      "khaleejtimes_2026-08-28",
+      "khaleejtimes_2026-08-31",
+      "khaleejtimes_2026-09-01",
+      "khaleejtimes_2026-09-02",
+      "khaleejtimes_2026-09-03",
+      "khaleejtimes_2026-09-07",
+      "khaleejtimes_2026-09-08",
+      "khaleejtimes_2026-09-11"
+    ],
+    "val": [
+      "albayan_2026-08-11",
+      "albayan_2026-08-21",
+      "alfajr_2026-08-17",
+      "alfajr_2026-09-03",
+      "gulftoday_2026-08-10",
+      "gulftoday_2026-09-03",
+      "khaleejtimes_2026-08-19",
+      "khaleejtimes_2026-08-20",
+      "khaleejtimes_2026-08-21"
+    ],
+    "test": [
+      "albayan_2026-09-04",
+      "alfajr_2026-09-04",
+      "alfajr_2026-09-05",
+      "gulftoday_2026-09-04",
+      "khaleejtimes_2026-09-04"
+    ]
+  },
+  "moved_pages": [
+    {
+      "image": "albayan_2026-09-03_page_0024.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-03_page_0028.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-03_page_0029.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-03_page_0031.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "khaleejtimes_2026-09-07_page_0002.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "khaleejtimes_2026-09-07_page_0006.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "khaleejtimes_2026-09-07_page_0011.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "khaleejtimes_2026-09-07_page_0014.png",
+      "from": "val",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-07_page_0010.png",
+      "from": "test",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-07_page_0027.png",
+      "from": "test",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-07_page_0028.png",
+      "from": "test",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-07_page_0029.png",
+      "from": "test",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-07_page_0030.png",
+      "from": "test",
+      "to": "train"
+    },
+    {
+      "image": "albayan_2026-09-07_page_0031.png",
+      "from": "test",
+      "to": "train"
+    }
+  ],
+  "added_pages": [
+    {
+      "image": "albayan_2026-09-01_page_0008.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 0
+    },
+    {
+      "image": "albayan_2026-09-02_page_0001.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 0
+    },
+    {
+      "image": "albayan_2026-09-03_page_0030.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 17
+    },
+    {
+      "image": "albayan_2026-09-07_page_0002.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 0
+    },
+    {
+      "image": "albayan_2026-09-08_page_0032.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 4
+    },
+    {
+      "image": "khaleejtimes_2026-09-07_page_0004.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 0
+    },
+    {
+      "image": "khaleejtimes_2026-09-08_page_0007.png",
+      "source": "reviewed_v10_cvat_overlay",
+      "boxes": 0
+    },
+    {
+      "image": "khaleejtimes_2026-08-24_page_0004.png",
+      "source": "input/khaleejtimes_2026-08-24.pdf",
+      "boxes": 0,
+      "review": "Whole page visually reviewed. News and PARCO supply-of-power-cable tender 6000013614. No legal notices."
+    },
+    {
+      "image": "khaleejtimes_2026-08-28_page_0004.png",
+      "source": "input/khaleejtimes_2026-08-28.pdf",
+      "boxes": 0,
+      "review": "Whole page visually reviewed. News and CPGCL invitation for bids, contract T-Rehab-02. No legal notices."
+    },
+    {
+      "image": "khaleejtimes_2026-09-11_page_0006.png",
+      "source": "input/khaleejtimes_2026-09-11.pdf",
+      "boxes": 0,
+      "review": "Whole page visually reviewed. News and a Pakistan Airports Authority expression of interest for procurement of consultancy services. No legal notices. Separate issue and solicitation from the July evaluation panel; validation, test, held-out, and preservation issues excluded."
+    }
+  ],
+  "pdf_sources": [
+    {
+      "path": "input/khaleejtimes_2026-08-24.pdf",
+      "sha256": "3b9c73569c651c7b735ae5fb43ccce6d8c9e60e8ec64e1236967337375520385"
+    },
+    {
+      "path": "input/khaleejtimes_2026-08-28.pdf",
+      "sha256": "e74f3a0a3fcae5392d32afce7d87981eb4b3d1177569e97f4c2a772fa6908061"
+    },
+    {
+      "path": "input/khaleejtimes_2026-09-11.pdf",
+      "sha256": "f9055e6f6022acd7105c39a4395638c24f4b77302e1da5e8fc5a139782db3a2b"
+    }
+  ],
+  "overlay_manifest": "output/correction_data/legal_notice_v10_targeted_correction/manifest.json",
+  "overlay_manifest_sha256": "bc7bbb69e2283195370c7689f27d33cd341829a5496de88aa0438b48ff0a2dd7",
+  "training_authorized": false
+}

@@ -26,6 +26,7 @@ __pycache__/
 /dataset_v3/
 /dataset_v4/
 /dataset_v5_corrected/
+/dataset_v11_consolidated/
 /output/*
 !/output/.gitkeep
 /expected-output/*

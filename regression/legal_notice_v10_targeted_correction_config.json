@@ -1,0 +1,49 @@
+{
+  "base_config": "regression/protected_correction_r7_config.json",
+  "run_name": "legal_notice_v10_targeted_correction_r2",
+  "starting_weights": "runs/legal_notice_v8_protected_head_cpu_r7_paa_analogue/weights/candidate.pt",
+  "starting_weights_sha256": "2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76",
+  "warm_start_run": null,
+  "correction_overlay_manifest": "output/correction_data/legal_notice_v10_targeted_correction/manifest.json",
+  "correction_overlay_manifest_sha256": "bc7bbb69e2283195370c7689f27d33cd341829a5496de88aa0438b48ff0a2dd7",
+  "eligible_extra_train_issues": [
+    "albayan_2026-09-01",
+    "albayan_2026-09-02",
+    "albayan_2026-09-03",
+    "albayan_2026-09-07",
+    "albayan_2026-09-08",
+    "khaleejtimes_2026-09-07",
+    "khaleejtimes_2026-09-08",
+    "khaleejtimes_2026-09-11"
+  ],
+  "max_iterations": 400,
+  "max_evaluations": 400,
+  "preservation_baseline_audit": "output/regression_audit/legal_notice_v8_protected_head_cpu_r7_paa_analogue",
+  "trainable_scope": {
+    "prefix": "model.23.cv3",
+    "tensors": 15,
+    "parameters": 198915,
+    "frozen": "backbone, neck, box branches, batch-normalization running statistics, and all other checkpoint tensors"
+  },
+  "optimizer": {
+    "name": "LBFGS",
+    "learning_rate": 1.0,
+    "history_size": 10,
+    "line_search": "strong_wolfe",
+    "invocations": 1
+  },
+  "promotion_gates": {
+    "targeted_valid_notices": "21/21 accepted at confidence 0.80 and IoU >= 0.50",
+    "targeted_negative_regions": "8/8 at or below confidence 0.50; zero accepted at 0.80",
+    "targeted_unmatched_detections": 0,
+    "july_valid_references": "548/548",
+    "fixed_valid_references": "271/271",
+    "challenge_valid_references": "31/31",
+    "critical_boundaries": "4/4",
+    "existing_exclusions": "no increase relative to v8 R7 after semantic review",
+    "runtime": "normal main.py detect equivalence at confidence 0.80 and image size 1280"
+  },
+  "training_authorization_required": true,
+  "training_authorized": false,
+  "revision_reason": "One bounded active-score correction from v8 R7. Suppress eight reviewed regions covering September news/header, vehicle-disposal, auction, and e-tender failures while preserving 21 complete mixed-page notices, the R7 Gulf Today table recovery targets, and all existing preservation suites."
+}

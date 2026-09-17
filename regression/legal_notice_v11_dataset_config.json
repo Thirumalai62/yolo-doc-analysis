@@ -1,0 +1,44 @@
+{
+  "name": "legal_notice_v11_consolidated",
+  "source_dataset": "dataset_v5_corrected",
+  "source_dataset_sha256": "639a294efc01ef5b360a92f9aef55d3c41d6bb469507dab48cecf895b5225c5b",
+  "destination_dataset": "dataset_v11_consolidated",
+  "manifest_output": "regression/legal_notice_v11_dataset_manifest.json",
+  "correction_overlay_manifest": "output/correction_data/legal_notice_v10_targeted_correction/manifest.json",
+  "correction_overlay_manifest_sha256": "bc7bbb69e2283195370c7689f27d33cd341829a5496de88aa0438b48ff0a2dd7",
+  "reviewed_extra_source": "regression/protected_correction_r7_config.json",
+  "reviewed_extra_source_sha256": "7b0ea6af90f549781d1925ad7c7c1658a8648732aed6aa394c478f43e848684a",
+  "render_dpi": 200,
+  "move_issues_to_train": [
+    "albayan_2026-09-03",
+    "albayan_2026-09-07",
+    "khaleejtimes_2026-09-07"
+  ],
+  "reviewed_extra_pages": [
+    "khaleejtimes_2026-08-24_page_0004.png",
+    "khaleejtimes_2026-08-28_page_0004.png",
+    "khaleejtimes_2026-09-11_page_0006.png"
+  ],
+  "sampling_overrides": {
+    "albayan_2026-09-01_page_0008.png": {"category": "unrelated_editorial_or_news", "multiplier": 3},
+    "albayan_2026-09-02_page_0001.png": {"category": "header_or_editorial_teaser", "multiplier": 3},
+    "albayan_2026-09-03_page_0030.png": {"category": "vehicle_auction_or_disposal_mixed", "multiplier": 2},
+    "albayan_2026-09-07_page_0002.png": {"category": "unrelated_editorial_or_news", "multiplier": 3},
+    "albayan_2026-09-08_page_0032.png": {"category": "vehicle_auction_or_disposal_mixed", "multiplier": 2},
+    "khaleejtimes_2026-09-07_page_0004.png": {"category": "procurement_tender_or_rfp", "multiplier": 3},
+    "khaleejtimes_2026-09-08_page_0007.png": {"category": "unrelated_editorial_or_news", "multiplier": 3},
+    "khaleejtimes_2026-08-24_page_0004.png": {"category": "procurement_tender_or_rfp", "multiplier": 2},
+    "khaleejtimes_2026-08-28_page_0004.png": {"category": "procurement_tender_or_rfp", "multiplier": 2},
+    "khaleejtimes_2026-09-11_page_0006.png": {"category": "procurement_tender_or_rfp", "multiplier": 2},
+    "gulftoday_2026-08-14_page_0013.png": {"category": "valid_gulf_table_preservation", "multiplier": 2},
+    "gulftoday_2026-08-21_page_0013.png": {"category": "valid_gulf_table_preservation", "multiplier": 2},
+    "gulftoday_2026-09-02_page_0012.png": {"category": "valid_gulf_table_preservation", "multiplier": 2}
+  },
+  "expected_counts": {
+    "train": {"images": 91, "label_files": 91, "boxes": 324},
+    "val": {"images": 28, "label_files": 28, "boxes": 162},
+    "test": {"images": 30, "label_files": 30, "boxes": 267}
+  },
+  "expected_epoch_samples": 109,
+  "training_authorized": false
+}

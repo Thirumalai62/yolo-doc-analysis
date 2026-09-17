@@ -38,6 +38,22 @@ def write(path, value):
     Path(path).write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
 
 
+def resolve_config(path):
+    config = load(path)
+    if "base_config" in config:
+        config = {**resolve_config(ROOT / config["base_config"]), **config}
+    manifest_value = config.get("correction_overlay_manifest")
+    if manifest_value:
+        manifest_path = ROOT / manifest_value
+        assert fixed.file_sha256(manifest_path) == config["correction_overlay_manifest_sha256"]
+        negative_regions = {name: list(regions) for name, regions in config["negative_regions_xyxyn"].items()}
+        for page in load(manifest_path)["pages"]:
+            assert page["image_name"] not in negative_regions
+            negative_regions[page["image_name"]] = page["negative_regions_xyxyn"]
+        config["negative_regions_xyxyn"] = negative_regions
+    return config
+
+
 def logit(p):
     return math.log(p / (1 - p))
 
@@ -55,13 +71,36 @@ def nonlinear_logits(x, block, final):
     return F.linear(F.silu(z), final.weight[:, :, 0, 0], final.bias).flatten()
 
 
+def overlay_train_pages(config) -> list[dict]:
+    pages = list(config.get("extra_train_pages", []))
+    manifest_value = config.get("correction_overlay_manifest")
+    if manifest_value:
+        manifest_path = ROOT / manifest_value
+        assert fixed.file_sha256(manifest_path) == config["correction_overlay_manifest_sha256"]
+        manifest = load(manifest_path)
+        assert manifest["status"] == "prepared_not_trained" and manifest["class_name"] == "legal_notice"
+        for page in manifest["pages"]:
+            pages.append({
+                "issue": page["issue"],
+                "image_name": page["image_name"],
+                "image": page["image"],
+                "label": page["label"],
+                "split": "train",
+                "reviewed_complete_labels": page["valid_notice_count"] > 0,
+                "reviewed_no_valid_notices": page["valid_notice_count"] == 0,
+                "image_sha256": page["image_sha256"],
+                "label_sha256": page["label_sha256"],
+            })
+    return pages
+
+
 def verify(config):
     assert __version__ == config["ultralytics_version"]
     assert fixed.file_sha256(ROOT / config["starting_weights"]) == config["starting_weights_sha256"]
     assert dataset_tools.tree_sha256(DATA, DEVELOPMENT_ROOTS) == config["development_sha256"]
     train_files = {p.name for p in (DATA / "images/train").glob("*.png")}
     assert set(config["positive_corrections"]) <= train_files
-    extra = config.get("extra_train_pages", [])
+    extra = overlay_train_pages(config)
     extra_names = {p["image_name"] for p in extra}
     assert not extra_names & train_files and len(extra_names) == len(extra)
     assert set(config["negative_regions_xyxyn"]) <= train_files | extra_names
@@ -73,10 +112,25 @@ def verify(config):
                          for p in (DATA / f"images/{split}").glob("*.png")}
     explicitly_eligible = set(config.get("eligible_extra_train_issues", []))
     for page in extra:
-        assert page["reviewed_no_valid_notices"] is True and page["split"] == "train"
-        assert page["issue"] not in excluded | evaluation_issues
+        assert page["split"] == "train"
+        assert page.get("reviewed_no_valid_notices") is True or page.get("reviewed_complete_labels") is True
+        assert not (page.get("reviewed_no_valid_notices") and page.get("reviewed_complete_labels"))
+        assert page["issue"] not in excluded
+        assert page["issue"] not in evaluation_issues or page["issue"] in explicitly_eligible
         assert page["issue"].startswith("khaleejtimes_2026-08-") or page["issue"] in explicitly_eligible
         assert page["image_name"].startswith(page["issue"] + "_page_")
+        image_path = ROOT / page["image"]
+        assert image_path.is_file()
+        if page.get("image_sha256"):
+            assert fixed.file_sha256(image_path) == page["image_sha256"]
+        label_value = page.get("label")
+        if page.get("reviewed_complete_labels"):
+            assert label_value
+        if label_value:
+            label_path = ROOT / label_value
+            assert label_path.is_file()
+            if page.get("label_sha256"):
+                assert fixed.file_sha256(label_path) == page["label_sha256"]
     return YOLO(str(ROOT / config["starting_weights"]))
 
 
@@ -102,7 +156,8 @@ def prepare(config, config_path):
     page_hashes = []
     sources = [(p.name, p, DATA / "labels/train" / p.with_suffix(".txt").name)
                for p in sorted((DATA / "images/train").glob("*.png"))]
-    sources += [(p["image_name"], ROOT / p["image"], None) for p in config.get("extra_train_pages", [])]
+    sources += [(p["image_name"], ROOT / p["image"], ROOT / p["label"] if p.get("label") else None)
+                for p in overlay_train_pages(config)]
     for image_name, path, label_path in sources:
         t, transform = page_tensor(path, auto=True)
         gt = labels(label_path, transform, t.shape[-2:]) if label_path is not None else torch.zeros(0, 4)
@@ -172,7 +227,8 @@ def prepare(config, config_path):
             counts[str(k)] = int(((kind == k) & keep).sum())
         audit.append({"image": image_name, "anchors": counts, "targets": page_targets})
         page_hashes.append({"image": image_name, "source": fixed.relative_path(path), "image_sha256": fixed.file_sha256(path),
-                            "label_sha256": fixed.file_sha256(label_path) if label_path else None, "reviewed_empty_label": label_path is None})
+                            "label_sha256": fixed.file_sha256(label_path) if label_path else None,
+                            "valid_label_count": len(gt), "reviewed_empty_label": len(gt) == 0})
         print(f"cached {image_name}: {int(keep.sum())} anchors", flush=True)
     for handle in handles:
         handle.remove()
@@ -239,7 +295,8 @@ def fit(config, config_path):
         assert manifest["config_sha256"] == fixed.file_sha256(config_path)
     else:
         source_config = load(cache_root / "config.json")
-        for key in ("starting_weights_sha256", "development_sha256", "positive_corrections", "negative_regions_xyxyn", "extra_train_pages"):
+        for key in ("starting_weights_sha256", "development_sha256", "positive_corrections", "negative_regions_xyxyn",
+                    "extra_train_pages", "correction_overlay_manifest", "correction_overlay_manifest_sha256"):
             assert source_config.get(key) == config.get(key), f"Cache mismatch: {key}"
         if root.exists():
             assert load(root / "config.json") == config and not (root / "fit_report.json").exists(), "Output already contains a fit"
@@ -305,8 +362,11 @@ def evaluate(config):
     root = ROOT / "output/regression_audit" / config["run_name"]
     weights = ROOT / "runs" / config["run_name"] / "weights/candidate.pt"
     assert fixed.file_sha256(weights) == load(root / "fit_report.json")["candidate_sha256"]
-    july_manifest = load(OLD_AUDIT / "july_manifest.json")
-    assert load(OLD_AUDIT / "baseline_july.json")["weights_sha256"] == config["starting_weights_sha256"]
+    baseline_root = ROOT / config.get("preservation_baseline_audit", str(OLD_AUDIT.relative_to(ROOT)))
+    baseline_july_path = baseline_root / ("july.json" if config.get("preservation_baseline_audit") else "baseline_july.json")
+    baseline_july = load(baseline_july_path)
+    assert baseline_july["weights_sha256"] == config["starting_weights_sha256"]
+    july_manifest = load(baseline_root / "july_manifest.json")
     # A user may clear a detect output folder between reviews. Recover missing
     # renders into this audit only, and require exact equality with frozen hashes.
     import sys
@@ -324,12 +384,33 @@ def evaluate(config):
         else:
             assert fixed.file_sha256(image) == page["image_sha256"]
     write(root / "july_manifest.json", july_manifest)
+    fixed_manifest = load(ROOT / "regression/fixed080_manifest.json")
+    missing_by_issue = {}
+    for page in fixed_manifest["pages"]:
+        image = ROOT / page["image"]
+        if image.exists():
+            assert fixed.file_sha256(image) == page["image_sha256"], "Existing fixed-suite render differs from frozen review"
+        else:
+            missing_by_issue.setdefault(page["issue"], {"pages": set(), "destination": image.parent})["pages"].add(page["page"])
+    for issue, missing in missing_by_issue.items():
+        render_pdf(ROOT / "input" / (issue + ".pdf"), missing["destination"], 200, missing["pages"])
+    for page in fixed_manifest["pages"]:
+        assert fixed.file_sha256(ROOT / page["image"]) == page["image_sha256"], "Recovered fixed-suite render differs from frozen review"
     # Run targeted July recovery first, then every preservation check. Selection
     # is never based on aggregate mAP or on corrected errors alone.
     j = evaluate_july(weights, july_manifest, fixed.file_sha256(root / "july_manifest.json"), root / "july.json")
     f = run_fixed(weights, ROOT / "regression/fixed080_manifest.json", root / "fixed080.json")
     c = run_challenge(weights, ROOT / "regression/full_category_challenge_manifest.json", root / "challenge.json")
-    failures = stop_reasons(f, c, j, load(OLD_AUDIT / "baseline_july.json"))
+    failures = stop_reasons(f, c, j, baseline_july)
+    if config.get("preservation_baseline_audit"):
+        baseline_fixed = load(baseline_root / "fixed080.json")
+        baseline_challenge = load(baseline_root / "challenge.json")
+        if f["totals"]["excluded_accepted"] > baseline_fixed["totals"]["excluded_accepted"]:
+            failures.append("fixed_exclusions_worse_than_r7")
+        if c["totals"]["excluded_accepted_regions"] > baseline_challenge["totals"]["excluded_accepted_regions"]:
+            failures.append("challenge_exclusions_worse_than_r7")
+        if j["totals"]["excluded_accepted_regions"] > baseline_july["totals"]["excluded_accepted_regions"]:
+            failures.append("july_exclusions_worse_than_r7")
     targeted_pass = not failures and j["passed"] and all(t["complete_accepted"] for t in j["recovery_targets"])
     report = {"targeted_pass": targeted_pass, "full_promotion_pass": targeted_pass and f["passed"] and c["passed"],
               "failures": failures, "july": j["totals"], "targets": j["recovery_targets"], "fixed": f["totals"], "challenge": c["totals"]}
@@ -343,9 +424,7 @@ def main():
     parser.add_argument("--config", default="regression/protected_correction_config.json")
     args = parser.parse_args()
     config_path = ROOT / args.config
-    config = load(config_path)
-    if "base_config" in config:
-        config = {**load(ROOT / config["base_config"]), **config}
+    config = resolve_config(config_path)
     if args.command == "prepare":
         prepare(config, config_path)
     elif args.command == "fit":

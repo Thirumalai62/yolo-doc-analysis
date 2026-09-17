@@ -1,7 +1,12 @@
-"""Check corrective score direction and preservation gradients independently."""
+"""Check corrective score direction, preservation, and overlay loading."""
+import hashlib
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 import torch
-from protected_correction import objective, nonlinear_logits
+from protected_correction import objective, nonlinear_logits, overlay_train_pages
 
 
 class ProtectedCorrectionTests(unittest.TestCase):
@@ -61,6 +66,35 @@ class ProtectedCorrectionTests(unittest.TestCase):
         cached_gradients = torch.autograd.grad(actual.sum(), parameters)
         for a, b in zip(native_gradients, cached_gradients):
             self.assertTrue(torch.allclose(a, b, atol=1e-5))
+
+    def test_hashed_overlay_supplies_labeled_and_empty_training_pages(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest_path = root / "overlay.json"
+            manifest = {
+                "status": "prepared_not_trained",
+                "class_name": "legal_notice",
+                "pages": [
+                    {"issue": "paper_2026-01-01", "image_name": "paper_2026-01-01_page_0001.png",
+                     "image": "positive.png", "label": "positive.txt", "valid_notice_count": 1,
+                     "image_sha256": "image", "label_sha256": "label"},
+                    {"issue": "paper_2026-01-02", "image_name": "paper_2026-01-02_page_0001.png",
+                     "image": "negative.png", "label": "negative.txt", "valid_notice_count": 0,
+                     "image_sha256": "image", "label_sha256": "label"},
+                ],
+            }
+            content = json.dumps(manifest).encode()
+            manifest_path.write_bytes(content)
+            config = {
+                "correction_overlay_manifest": "overlay.json",
+                "correction_overlay_manifest_sha256": hashlib.sha256(content).hexdigest(),
+            }
+            with patch("protected_correction.ROOT", root):
+                pages: list[dict] = overlay_train_pages(config)
+            self.assertTrue(pages[0]["reviewed_complete_labels"])
+            self.assertFalse(pages[0]["reviewed_no_valid_notices"])
+            self.assertFalse(pages[1]["reviewed_complete_labels"])
+            self.assertTrue(pages[1]["reviewed_no_valid_notices"])
 
 
 if __name__ == "__main__":

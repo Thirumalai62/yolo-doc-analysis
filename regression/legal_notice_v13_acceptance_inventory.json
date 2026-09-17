@@ -1,0 +1,42 @@
+{
+  "purpose": "Pin the user-provided test evidence that the next corrected detector must preserve or resolve.",
+  "source_summaries": [
+    {"path": "test-summary/test-summary.md", "sha256": "4d22098c67121910172803928a986a07dee5ad60029e062106eae7b9daff4720"},
+    {"path": "test-summary/summary-v1.md", "sha256": "ea562dd403c0545b1dc3d3a5ae95378dd86d5c34208a3c9d518739446f95b823"},
+    {"path": "test-summary/summary-v2.md", "sha256": "9f24b022037320bf4b6eeb2f5a6ad7535c33f6fcbb73a77a16c7e123b0adba2f"},
+    {"path": "test-summary/summary-v3.md", "sha256": "22c03487cf3a98f96482ed9de24744478c8523c71d0178b26c996f89fa0529a4"},
+    {"path": "test-summary/summary-v4.md", "sha256": "2ae379b8d5843910a6d4bedd020ce5218005fd97c6e183c3801fce0e860c1b03"},
+    {"path": "test-summary/summary-v5.md", "sha256": "55b7ae5a423aebb8166bf002863694aad0ddd39df789bcc1dc6f03e63c145293"},
+    {"path": "test-summary/summary-v6.md", "sha256": "5ca095488496f26c0210a5cfdfe4a06f53267aed69a1bdb0521cc52d81f66380"}
+  ],
+  "v10_user_verified_passes": {
+    "model": "runs/legal_notice_v10_targeted_correction_r2/weights/candidate.pt",
+    "confidence": 0.8,
+    "dates": ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-04", "2026-09-07"],
+    "newspapers": ["albayan", "alfajr", "gulftoday", "khaleejtimes"],
+    "issue_results": 20
+  },
+  "required_targeted_behavior": {
+    "valid_notices": 21,
+    "negative_regions": 8,
+    "negative_maximum_confidence": 0.5
+  },
+  "required_regression_behavior": {
+    "fixed_valid": 271,
+    "challenge_valid": 31,
+    "july_valid": 548,
+    "critical_boundaries": 4,
+    "gulf_recovery_targets": 3
+  },
+  "known_v10_regressions": [
+    {"id": "albayan_2026-09-09_p0034_v3_013", "candidate_confidence": 0.760427, "required_confidence": 0.8},
+    {"id": "gulftoday_2026-09-09_p0012_v3_009", "candidate_confidence": 0.637279, "required_confidence": 0.8},
+    {"id": "khaleejtimes_2026-09-09_p0014_v3_005", "candidate_confidence": 0.784415, "required_confidence": 0.8}
+  ],
+  "additional_reported_cases": [
+    {"issue": "khaleejtimes_2026-07-03", "page": 2, "behavior": "reject procurement corrigendum"},
+    {"issue": "khaleejtimes_2026-07-06", "page": null, "behavior": "reject tender false positive; summary has no page coordinate"},
+    {"issue": "gulftoday_2026-09-11", "page": null, "behavior": "reject real-estate-auction false positive; summary has no page coordinate"},
+    {"issue": "gulftoday_2026-09-15", "page": 13, "behavior": "recover two reviewed claims notices"}
+  ]
+}
