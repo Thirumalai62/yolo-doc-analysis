@@ -371,6 +371,16 @@ Local PDF and directory inputs continue to use the existing behavior.
 The command saves annotated pages, an image crop per notice, and a
 `detections.json` report in its isolated run directory. All inference uses CPU.
 
+## OpenSandbox Deployment
+
+The inference-only `doc_detector` package and custom Code Interpreter image keep
+the deployment runtime separate from the training-oriented `main.py`. See
+[`docs/opensandbox-deployment.md`](docs/opensandbox-deployment.md) for image
+building, model warmup, PDF task execution, and artifact retrieval.
+
+The approved implementation plan is recorded in
+[`DOCKER_DEPLOYMENT_PLAN.md`](DOCKER_DEPLOYMENT_PLAN.md).
+
 ## License Note
 
 Ultralytics publishes YOLO under AGPL-3.0 with a separate enterprise license.

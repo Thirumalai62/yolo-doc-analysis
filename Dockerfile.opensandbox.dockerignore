@@ -1,0 +1,8 @@
+**
+!doc_detector/
+!doc_detector/**
+!model-manifest.json
+!requirements-sandbox.lock
+!.build/
+!.build/opensandbox/
+!.build/opensandbox/legal_notice_r7.pt

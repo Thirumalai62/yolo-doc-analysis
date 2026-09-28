@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+ARG BASE_IMAGE=opensandbox/code-interpreter:v1.1.0
+FROM ${BASE_IMAGE}
+
+ARG PYTHON_VERSION=3.13
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+COPY requirements-sandbox.lock /opt/doc-detector/requirements-sandbox.lock
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && source /opt/code-interpreter/code-interpreter-env.sh python "${PYTHON_VERSION}" \
+    && python -m pip install \
+        --break-system-packages \
+        --no-cache-dir \
+        --only-binary=:all: \
+        --require-hashes \
+        -r /opt/doc-detector/requirements-sandbox.lock
+
+COPY doc_detector /opt/doc-detector/doc_detector
+COPY model-manifest.json /opt/doc-detector/model-manifest.json
+COPY .build/opensandbox/legal_notice_r7.pt /opt/doc-detector/models/legal_notice_r7.pt
+
+ENV PYTHON_VERSION=${PYTHON_VERSION} \
+    PYTHONPATH=/opt/doc-detector \
+    DOC_DETECTOR_MANIFEST=/opt/doc-detector/model-manifest.json \
+    DOC_DETECTOR_OUTPUT_ROOT=/tmp/doc-detector/jobs \
+    YOLO_CONFIG_DIR=/tmp/doc-detector/cache/ultralytics \
+    MPLCONFIGDIR=/tmp/doc-detector/cache/matplotlib \
+    XDG_CACHE_HOME=/tmp/doc-detector/cache
+
+RUN mkdir -p \
+        /tmp/doc-detector/jobs \
+        /tmp/doc-detector/cache/ultralytics \
+        /tmp/doc-detector/cache/matplotlib \
+    && source /opt/code-interpreter/code-interpreter-env.sh python "${PYTHON_VERSION}" \
+    && python -c "from doc_detector import get_detector; detector = get_detector(); detector.load(); print(detector.spec.version, detector.spec.sha256)"
+
+WORKDIR /workspace
+ENTRYPOINT ["/opt/code-interpreter/code-interpreter.sh"]

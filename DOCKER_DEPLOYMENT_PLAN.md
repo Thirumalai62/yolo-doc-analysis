@@ -1,6 +1,8 @@
 # Final OpenSandbox Detector Implementation Plan
 
-**Status:** Draft for team review. Implementation has not started.
+**Status:** Base implementation completed locally. OpenSandbox image build and
+platform validation remain pending because they require the target Docker and
+OpenSandbox environments.
 
 ## 1. Objective
 
@@ -152,6 +154,7 @@ examples/
 
 Dockerfile.opensandbox
 Dockerfile.opensandbox.dockerignore
+requirements-sandbox.in
 requirements-sandbox.lock
 model-manifest.json
 
@@ -271,7 +274,8 @@ it. The final image and dependency combination must pass Linux testing.
 
 ### Dependencies
 
-Prepare a Linux-tested lock file covering:
+Maintain Linux-tested direct constraints and a complete hash-verified lock
+covering:
 
 - CPU-only PyTorch and torchvision.
 - `ultralytics==8.4.146`.
@@ -280,7 +284,9 @@ Prepare a Linux-tested lock file covering:
 - Required transitive packages and Linux libraries.
 
 Install dependencies into the Python environment actually used by the execution
-kernel.
+kernel. The lock is resolved for Python 3.13 on `x86_64-manylinux_2_28` with the
+CPU PyTorch index; the image build must verify it against the approved base-image
+digest.
 
 Dependencies and model files will be prepared at image-build time rather than
 installed for each detection task. Model loading into memory happens during
@@ -351,7 +357,7 @@ The integration example will distinguish between:
 
 | Destination | Contents |
 | --- | --- |
-| GitHub | Detector source, tests, Dockerfile, dependency lock, model manifest, examples, documentation |
+| GitHub | Detector source, tests, Dockerfile, dependency constraints, model manifest, examples, documentation |
 | Existing GitHub development files | `main.py`, regression source, configuration, and relevant development documentation |
 | Private image registry | Built runtime image, including R7 |
 | Ignored local/build storage | Checkpoints, datasets, PDFs, generated outputs, environments, credentials |
@@ -455,6 +461,7 @@ Create:
 ```text
 Dockerfile.opensandbox
 Dockerfile.opensandbox.dockerignore
+requirements-sandbox.in
 requirements-sandbox.lock
 model-manifest.json
 ```
@@ -463,8 +470,8 @@ The build will:
 
 1. Use an approved immutable OpenSandbox base-image digest.
 2. Select the approved Python environment.
-3. Install CPU-only dependencies into that environment.
-4. Copy only runtime package files and examples.
+3. Install CPU-only dependencies from a complete hash-verified lock.
+4. Copy only the runtime package; the platform example remains outside the image.
 5. Verify and copy only the approved R7 checkpoint.
 6. Configure writable cache and output paths.
 7. Preserve the official Code Interpreter entrypoint.
@@ -531,6 +538,11 @@ troubleshooting, output retrieval, and cleanup.
 ## 13. Security And Operational Rules
 
 - Accept only HTTP and HTTPS URL inputs.
+- Reject non-public resolved addresses and revalidate HTTP redirect targets by
+  default. Enforce a default-deny OpenSandbox egress policy with explicit source
+  and redirect host allowlists.
+- Require the network layer to reject non-public destination IPs at connection
+  time; application DNS validation alone does not prevent DNS rebinding.
 - Apply PDF download timeout and maximum size limits.
 - Apply a maximum page count.
 - Do not log signed URL query strings.
@@ -545,7 +557,7 @@ troubleshooting, output retrieval, and cleanup.
 
 ## 14. Items For Team Confirmation
 
-Before implementation, confirm:
+Before release, confirm:
 
 1. **Platform versions:** OpenSandbox server, SDK, Code Interpreter image, and
    controller language.
@@ -557,6 +569,8 @@ Before implementation, confirm:
 5. **Output contract:** JSON and PNG with configurable artifact selection are
    sufficient for the base release.
 6. **Model release:** R7 at confidence `0.80` is the selected initial checkpoint.
+7. **Network enforcement:** The target runtime applies allowlist and non-public
+   destination-IP checks after DNS resolution and at connection time.
 
 ## 15. Implementation Order
 

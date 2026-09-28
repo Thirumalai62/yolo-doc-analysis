@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "default_model": "r7",
+  "models": {
+    "r7": {
+      "file": "models/legal_notice_r7.pt",
+      "sha256": "2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76",
+      "class_names": ["legal_notice"],
+      "settings": {
+        "confidence": 0.8,
+        "image_size": 1280,
+        "render_dpi": 200,
+        "device": "cpu",
+        "max_detections": 300
+      },
+      "limits": {
+        "download_timeout_seconds": 60,
+        "total_download_timeout_seconds": 120,
+        "max_pdf_bytes": 104857600,
+        "max_pages": 100,
+        "max_page_pixels": 50000000,
+        "max_rendered_bytes": 2147483648,
+        "max_artifact_bytes": 3221225472,
+        "allow_private_hosts": false
+      }
+    }
+  }
+}
