@@ -371,12 +371,419 @@ Local PDF and directory inputs continue to use the existing behavior.
 The command saves annotated pages, an image crop per notice, and a
 `detections.json` report in its isolated run directory. All inference uses CPU.
 
+## Run R7 Locally With Docker
+
+This workflow runs the inference-only `doc_detector` package in the same custom
+Linux image intended for OpenSandbox. It is separate from the training-oriented
+`main.py` workflow above.
+
+The image contains the approved R7 model and its Python dependencies. A direct
+HTTP or HTTPS PDF is downloaded into bounded container memory and is not saved
+as a source PDF. Requested rendered pages, annotations, crops, and JSON reports
+are written to a host-mounted output directory.
+
+The commands in this section use Windows PowerShell from the repository root:
+
+```powershell
+Set-Location "E:\yolo-doc-analysis"
+```
+
+The Windows `.venv` does not need to be activated when running the Docker image.
+
+### 1. Start Docker Desktop
+
+If Docker Desktop is closed:
+
+1. Open **Docker Desktop** from the Windows Start menu.
+2. Wait until Docker Desktop reports that its engine is running.
+3. Ensure Docker Desktop is using Linux containers.
+4. Open PowerShell and move to the repository root as shown above.
+
+Docker Desktop can also be started from PowerShell when installed in its default
+location:
+
+```powershell
+Start-Process "$env:ProgramFiles\Docker\Docker\Docker Desktop.exe"
+```
+
+Starting the application does not mean the engine is immediately ready. Wait
+for Docker Desktop to finish initialization before continuing.
+
+Verify the client and Linux engine:
+
+```powershell
+docker version
+```
+
+A ready installation prints both `Client` and `Server` sections. If it prints
+only the client followed by an error for
+`dockerDesktopLinuxEngine`, Docker Desktop is not ready yet. Wait for startup
+to finish and run `docker version` again.
+
+### 2. Check Whether The Image Exists
+
+```powershell
+docker image inspect "legal-notice-detector:r7" --format "{{.Id}}"
+```
+
+If this prints an image SHA, continue to the smoke test. Build the image if the
+command reports that the image does not exist, or whenever the Dockerfile,
+dependency lock, packaged detector code, model manifest, or model changes.
+
+### 3. Build The Image
+
+The default build reads the approved checkpoint from:
+
+```text
+runs/legal_notice_v8_protected_head_cpu_r7_paa_analogue/weights/candidate.pt
+```
+
+It verifies SHA256
+`2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76`
+before building:
+
+```powershell
+.\scripts\build-opensandbox-image.ps1 `
+    -Image "legal-notice-detector:r7"
+```
+
+The first build downloads the OpenSandbox base image and CPU inference
+dependencies and can take several minutes. Later builds normally reuse Docker's
+cache. A successful build ends with:
+
+```text
+Built legal-notice-detector:r7
+```
+
+Do not close Docker Desktop while the build is running.
+
+### 4. Run The Model Smoke Test
+
+```powershell
+.\scripts\smoke-test-opensandbox-image.ps1 `
+    -Image "legal-notice-detector:r7"
+```
+
+The smoke test selects Python 3.13 inside the image, validates the packaged R7
+checkpoint, loads it, and performs one synthetic warmup prediction. Successful
+output includes:
+
+```text
+'status': 'ready'
+'model_version': 'r7'
+'warmed': True
+OpenSandbox detector image smoke test passed: legal-notice-detector:r7
+```
+
+This confirms that the model starts correctly. It does not process a real PDF.
+
+### 5. Run A Direct PDF URL
+
+Use the following procedure in one PowerShell window. No local input-directory
+mount is needed because the detector downloads the URL into memory.
+
+Create or confirm the host output directory:
+
+```powershell
+New-Item -ItemType Directory -Force ".\output" | Out-Null
+$OutputDir = (Resolve-Path ".\output").Path
+```
+
+Set a direct PDF URL. For example:
+
+```powershell
+$env:DETECTOR_PDF_URL = "https://alfajr-news.net/uploads/posts/56b19cbeed56fe0bd788e6dc74eb7e0d.pdf"
+```
+
+For a signed URL or a URL you do not want stored in PowerShell history, prompt
+for it instead:
+
+```powershell
+$env:DETECTOR_PDF_URL = Read-Host "Enter the direct HTTP or HTTPS PDF URL"
+```
+
+Define the Python task that will run inside the container:
+
+```powershell
+$PythonCode = @'
+import json
+import os
+import time
+from pathlib import Path
+from uuid import uuid4
+
+from doc_detector import get_detector
+
+job_id = f"url-{uuid4().hex[:12]}"
+output_dir = Path("/host-output/docker-url-tests") / job_id
+
+detector = get_detector(model_version="r7")
+
+started = time.perf_counter()
+readiness = detector.warmup()
+warmup_seconds = time.perf_counter() - started
+model_identity = detector.model_identity
+
+started = time.perf_counter()
+result = detector.detect(
+    job_id=job_id,
+    pdf_url=os.environ["DETECTOR_PDF_URL"],
+    output_dir=output_dir,
+    outputs=["json", "crops", "annotated_pages", "rendered_pages"],
+)
+detection_seconds = time.perf_counter() - started
+
+print(json.dumps({
+    "readiness": readiness,
+    "result": result.as_dict(),
+    "warmup_seconds": round(warmup_seconds, 2),
+    "detection_seconds": round(detection_seconds, 2),
+    "model_reused": detector.model_identity == model_identity,
+}, indent=2))
+'@
+```
+
+Run that task in the image:
+
+```powershell
+$PythonCode | docker run --rm -i `
+    --platform linux/amd64 `
+    --entrypoint /bin/bash `
+    --env DETECTOR_PDF_URL `
+    --env "DOC_DETECTOR_OUTPUT_ROOT=/host-output/docker-url-tests" `
+    --mount "type=bind,source=$OutputDir,target=/host-output" `
+    "legal-notice-detector:r7" `
+    -lc 'source /opt/code-interpreter/code-interpreter-env.sh python 3.13 && python -'
+
+if ($LASTEXITCODE -ne 0) {
+    throw "URL detection failed with exit code $LASTEXITCODE."
+}
+```
+
+PowerShell sends the task through standard input to avoid nested quoting issues
+between PowerShell, Docker, Bash, and Python. `--rm` removes the stopped
+container after the task; it does not remove the image or host-mounted results.
+
+Each execution generates a unique job ID, so rerunning the command does not
+overwrite an earlier job.
+
+### 6. Inspect The Results
+
+Results are saved under:
+
+```text
+E:\yolo-doc-analysis\output\docker-url-tests\url-<unique-id>\
+```
+
+Find the newest job from PowerShell:
+
+```powershell
+$LatestJob = Get-ChildItem ".\output\docker-url-tests" -Directory |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+$LatestJob.FullName
+Get-Content (Join-Path $LatestJob.FullName "result.json")
+```
+
+A completed job contains:
+
+```text
+url-<unique-id>/
+  rendered/
+    page_0001.png
+    ...
+  pages/
+    page_0001/
+      annotated.png
+      crops/
+    ...
+  detections.json
+  result.json
+```
+
+`result.json` records the job status, source type, approved model identity,
+inference settings, page count, detection count, and relative artifact paths.
+`detections.json` contains the confidence and bounding box for each accepted
+notice. Review annotated pages and crops to assess detection quality.
+
+The source PDF itself should not appear in the job directory. Only generated
+artifacts are persisted. With `outputs=["json"]`, rendered pages remain temporary
+and are deleted after inference.
+
+The verified Alfajr URL example completed with 20 pages and 87 detections. On
+the development machine, model warmup took approximately 4 seconds and the PDF
+job approximately 68 seconds. Timings vary by CPU, available memory, network,
+PDF size, and Docker configuration.
+
+### 7. Choose Which Artifacts To Keep
+
+JSON reports are always written. Edit the `outputs` value in `$PythonCode` to
+control retained visual files:
+
+```python
+outputs=["json"]
+```
+
+or:
+
+```python
+outputs=["json", "crops", "annotated_pages", "rendered_pages"]
+```
+
+Supported values are:
+
+- `json`
+- `crops`
+- `annotated_pages`
+- `rendered_pages`
+
+### 8. Test Local Detector Code Without Rebuilding
+
+For development, mount the local `doc_detector` directory over the packaged
+copy. This lets a new container run the latest local Python source without
+rebuilding the image.
+
+Resolve the source directory:
+
+```powershell
+$SourceDir = (Resolve-Path ".\doc_detector").Path
+```
+
+Then add this mount to the `docker run` command in step 5, before the image name:
+
+```powershell
+--mount "type=bind,source=$SourceDir,target=/opt/doc-detector/doc_detector,readonly" `
+```
+
+The development cycle is:
+
+1. Edit files under `doc_detector/`.
+2. Run the URL task again with the source mount.
+3. Inspect the new job's JSON, annotations, and crops.
+4. Run the unit and regression tests.
+5. Repeat until the change is ready.
+
+The source mount is only for development. Before sharing an image, rebuild it
+and test it again without this mount so the test exercises packaged code.
+
+Changes that require rebuilding include:
+
+- `Dockerfile.opensandbox`
+- `requirements-sandbox.in` or `requirements-sandbox.lock`
+- `model-manifest.json`
+- The packaged checkpoint
+- Any final `doc_detector/` change that must be included in the shared image
+
+### 9. Build And Verify A Development Version
+
+Use a new tag instead of overwriting a previously tested image:
+
+```powershell
+.\scripts\build-opensandbox-image.ps1 `
+    -Image "legal-notice-detector:r7-dev1"
+
+.\scripts\smoke-test-opensandbox-image.ps1 `
+    -Image "legal-notice-detector:r7-dev1"
+```
+
+Repeat the real URL test with `legal-notice-detector:r7-dev1` and no source-code
+mount. Review all generated results before selecting that image for handoff.
+
+### 10. Stop Docker And Resume Later
+
+The commands above use temporary containers. After a run, this should normally
+show no detector container:
+
+```powershell
+docker ps
+```
+
+The built images remain available:
+
+```powershell
+docker image ls "legal-notice-detector"
+```
+
+It is safe to close Docker Desktop after no builds or runs are active. Output
+files remain under `output/docker-url-tests/` because they are stored on the
+Windows host.
+
+After restarting Windows or Docker Desktop:
+
+1. Wait for the Docker Linux engine to become ready.
+2. Run `docker version`.
+3. Check the image with `docker image inspect`.
+4. Run the smoke test if the Docker or image environment changed.
+5. Recreate `$OutputDir`, `$env:DETECTOR_PDF_URL`, and `$PythonCode`.
+6. Run the URL task again.
+
+PowerShell variables do not persist after closing the PowerShell window.
+
+### Docker Troubleshooting
+
+#### Docker command is not found
+
+Install or repair Docker Desktop, then open a new PowerShell window so its PATH
+changes are available.
+
+#### Docker cannot connect to `dockerDesktopLinuxEngine`
+
+Docker Desktop is closed, still starting, or not using Linux containers. Start
+Docker Desktop, wait for the engine, and rerun `docker version`.
+
+#### The image does not exist
+
+Build it with `scripts/build-opensandbox-image.ps1` as shown in step 3. Docker
+images are local to the active Docker context.
+
+#### PowerShell blocks a script
+
+Use a process-scoped execution policy rather than changing the machine policy:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Then run the build or smoke-test script again from the same PowerShell window.
+
+#### The URL response is not a PDF
+
+Use a direct PDF URL. Viewer pages, login pages, expired signed links, and HTML
+error responses are rejected.
+
+#### The PDF host is rejected as non-public
+
+The detector rejects loopback, private, link-local, reserved, and other
+non-public destinations by default. Do not disable this check for untrusted URL
+input. Internal sources require a separately reviewed network policy.
+
+#### The download exceeds a timeout or size limit
+
+The runtime enforces connection, total download, source-size, page-count,
+rendered-page, and aggregate artifact limits from `model-manifest.json`. Confirm
+that the source responds promptly and that the PDF is within the approved
+limits.
+
+#### The output destination already exists
+
+Every job directory is immutable. Use a new job ID or let the example generate
+one. Do not delete or overwrite prior results until they have been reviewed.
+
+#### Python reports a syntax error after `python -c`
+
+Nested quoting can be stripped when a command passes through PowerShell, Docker,
+Bash, and Python. Use the stdin-based commands in this README and the current
+`smoke-test-opensandbox-image.ps1` script.
+
 ## OpenSandbox Deployment
 
-The inference-only `doc_detector` package and custom Code Interpreter image keep
-the deployment runtime separate from the training-oriented `main.py`. See
-[`docs/opensandbox-deployment.md`](docs/opensandbox-deployment.md) for image
-building, model warmup, PDF task execution, and artifact retrieval.
+Complete local Docker testing before platform integration. The inference-only
+`doc_detector` package and custom Code Interpreter image keep the deployment
+runtime separate from the training-oriented `main.py`. See
+[`docs/opensandbox-deployment.md`](docs/opensandbox-deployment.md) for private
+registry publishing, persistent Code Interpreter context execution, network
+policy, artifact retrieval, and platform release gates.
 
 The approved implementation plan is recorded in
 [`DOCKER_DEPLOYMENT_PLAN.md`](DOCKER_DEPLOYMENT_PLAN.md).
