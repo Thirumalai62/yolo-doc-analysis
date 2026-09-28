@@ -6,7 +6,7 @@ project's training-oriented `main.py`.
 
 ## Runtime Contract
 
-- Model: R7 `candidate.pt`
+- Model: R7 `models/legal_notice_r7.pt`
 - Model SHA256: `2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76`
 - Confidence: `0.80`
 - Image size: `1280`
@@ -33,6 +33,8 @@ are written to the caller's output directory.
 | `Dockerfile.opensandbox.dockerignore` | Minimal runtime build context |
 | `scripts/build-opensandbox-image.sh` | Verify R7 and build `linux/amd64` image |
 | `scripts/smoke-test-opensandbox-image.sh` | Load and warm R7 inside the image |
+| `scripts/run-local-detector.sh` | Run a direct PDF URL through the local image |
+| `examples/local_detection_task.py` | Local URL task executed inside the image |
 | `examples/sandbox_detection_task.py` | Persistent-context SDK example |
 
 ## Prerequisites
@@ -84,11 +86,12 @@ On Windows PowerShell with Docker Desktop running:
 
 The build script:
 
-1. Reads R7 from its current ignored `runs/` location by default.
-2. Verifies its approved checksum.
-3. Copies only that checkpoint into a temporary ignored build directory.
-4. Builds the custom `linux/amd64` image.
-5. Removes the temporary model staging directory.
+1. Resolves R7 and its checksum from `model-manifest.json`.
+2. Reads `models/legal_notice_r7.pt` by default and rejects unresolved Git LFS pointers.
+3. Verifies the approved checksum.
+4. Copies only that checkpoint into a temporary ignored build directory.
+5. Builds the custom `linux/amd64` image.
+6. Removes the temporary model staging directory.
 
 Override the local checkpoint location when required:
 
