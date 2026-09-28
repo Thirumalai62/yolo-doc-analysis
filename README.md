@@ -356,6 +356,18 @@ command. The general form is:
 .\.venv\Scripts\python.exe main.py detect --input input --weights runs/legal_notice/weights/best.pt --confidence 0.25
 ```
 
+`--input` also accepts a direct HTTP or HTTPS PDF URL, including a signed URL.
+Quote the URL so shell characters in its query string are preserved:
+
+```powershell
+.\.venv\Scripts\python.exe main.py detect --input "https://example.com/newspaper.pdf?token=..." --weights runs/legal_notice/weights/best.pt --confidence 0.25
+```
+
+For URL input, the source PDF is downloaded into memory and passed directly to
+the PDF renderer. The source PDF is not saved locally. Rendered page images and
+the normal detection artifacts are still written to the isolated output run.
+Local PDF and directory inputs continue to use the existing behavior.
+
 The command saves annotated pages, an image crop per notice, and a
 `detections.json` report in its isolated run directory. All inference uses CPU.
 

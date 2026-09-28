@@ -14,6 +14,9 @@ import math
 import shutil
 import subprocess
 import sys
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
+from urllib.request import Request, urlopen
 from zipfile import ZipFile
 from pathlib import Path
 from typing import Iterator
@@ -29,6 +32,7 @@ LAYOUT_REPOSITORY = "Armaggheddon/yolo26-document-layout"
 LAYOUT_MODEL_FILE = "yolo26m_doc_layout.pt"
 LEGAL_NOTICE_CLASS = "legal_notice"
 SUPPORTED_IMAGES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
+PDF_DOWNLOAD_TIMEOUT_SECONDS = 60
 
 
 def project_path(value: str) -> Path:
@@ -112,13 +116,14 @@ def input_files(input_path: Path, extensions: set[str]) -> list[Path]:
     return sorted(files)
 
 
-def render_pdf(pdf_path: Path, destination: Path, dpi: int, page_numbers: set[int] | None = None) -> list[Path]:
+def render_pdf(pdf_source: Path | bytes, destination: Path, dpi: int, page_numbers: set[int] | None = None) -> list[Path]:
     """Render each PDF page with pypdfium2; no external PDF utility is needed."""
     from PIL import Image
     import pypdfium2 as pdfium
 
     scale = dpi / 72
-    document = pdfium.PdfDocument(str(pdf_path))
+    document_input = str(pdf_source) if isinstance(pdf_source, Path) else pdf_source
+    document = pdfium.PdfDocument(document_input)
     rendered_paths: list[Path] = []
     destination.mkdir(parents=True, exist_ok=True)
     try:
@@ -134,6 +139,48 @@ def render_pdf(pdf_path: Path, destination: Path, dpi: int, page_numbers: set[in
     finally:
         document.close()
     return rendered_paths
+
+
+def is_http_url(value: str) -> bool:
+    parsed = urlsplit(value)
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc)
+
+
+def download_pdf(url: str) -> bytes:
+    """Fetch a direct PDF URL into memory without creating a source file."""
+    host = urlsplit(url).netloc
+    request = Request(
+        url,
+        headers={
+            "Accept": "application/pdf",
+            "User-Agent": "yolo-doc-analysis/1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=PDF_DOWNLOAD_TIMEOUT_SECONDS) as response:
+            pdf_data = response.read()
+    except HTTPError as error:
+        raise SystemExit(f"PDF download failed from {host}: HTTP {error.code}.") from error
+    except (URLError, TimeoutError, OSError) as error:
+        reason = getattr(error, "reason", error)
+        raise SystemExit(f"PDF download failed from {host}: {reason}.") from error
+
+    # PDF headers should occur within the first 1024 bytes according to the PDF specification.
+    if b"%PDF-" not in pdf_data[:1024]:
+        raise SystemExit(f"The response from {host} is not a valid PDF.")
+    return pdf_data
+
+
+def render_detection_input(input_value: str, dpi: int, destination_root: Path) -> list[Path]:
+    """Render either the existing local input forms or one direct PDF URL."""
+    if not is_http_url(input_value):
+        return render_input_pdfs(project_path(input_value), dpi, destination_root)
+
+    host = urlsplit(input_value).netloc
+    pdf_data = download_pdf(input_value)
+    rendered = render_pdf(pdf_data, destination_root / "remote_pdf", dpi)
+    print(f"Rendered {len(rendered)} page(s) from in-memory PDF: {host}")
+    return rendered
 
 
 def render_input_pdfs(
@@ -242,7 +289,7 @@ def run_detect(args: argparse.Namespace) -> None:
     ensure_directories()
     output_root = create_run_directory("legal_notices", args.name)
     rendered_root = output_root / "rendered"
-    pages = render_input_pdfs(project_path(args.input), args.dpi, rendered_root)
+    pages = render_detection_input(args.input, args.dpi, rendered_root)
     model = load_yolo(project_path(args.weights))
     require_legal_notice_model(model)
     report: list[dict] = []
@@ -911,7 +958,7 @@ def create_parser() -> argparse.ArgumentParser:
     preview.set_defaults(func=run_preview_layout)
 
     detect = commands.add_parser("detect", help="Detect legal notices using a custom trained model")
-    detect.add_argument("--input", default="input")
+    detect.add_argument("--input", default="input", help="PDF URL, local PDF, or local directory (default: input)")
     detect.add_argument("--weights", required=True, help="Custom legal_notice checkpoint")
     detect.add_argument("--dpi", type=int, default=200)
     detect.add_argument("--image-size", type=int, default=1280)
