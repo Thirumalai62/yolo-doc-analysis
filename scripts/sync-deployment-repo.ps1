@@ -47,8 +47,11 @@ function Add-ManagedTree([string]$SourceDirectory, [string]$TargetDirectory) {
 
 foreach ($Name in @(
     "Dockerfile.opensandbox",
+    "Dockerfile.opensandbox.full",
     "Dockerfile.opensandbox.dockerignore",
     "model-manifest.json",
+    "requirements-code-interpreter.in",
+    "requirements-code-interpreter.lock",
     "requirements-sandbox.in",
     "requirements-sandbox.lock"
 )) {
@@ -65,6 +68,8 @@ Add-ManagedFile (Join-Path $SourceRoot "examples/sandbox_detection_task.py") "ex
 foreach ($Name in @(
     "build-opensandbox-image.ps1",
     "build-opensandbox-image.sh",
+    "code-interpreter-env.sh",
+    "code-interpreter.sh",
     "run-local-detector.ps1",
     "run-local-detector.sh",
     "smoke-test-opensandbox-image.ps1",

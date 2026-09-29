@@ -24,7 +24,9 @@ changes them:
 - Device: CPU
 - Maximum detections per page: `300`
 - Target architecture: `linux/amd64`
-- Python: `3.13`
+- Python: `3.13.13`
+- Node.js: `22.2.0`
+- Kernels: Python, Bash, JavaScript, and TypeScript
 
 `model-manifest.json` is the authoritative runtime configuration. The build and
 runtime must reject a missing model, unresolved Git LFS pointer, checksum
@@ -120,8 +122,8 @@ tested image identity and observed results.
 - Keep `doc_detector` independent from the original training workspace.
 - Preserve manifest-driven settings rather than duplicating constants.
 - Keep dependency versions fully pinned and hash verified.
-- Regenerate `requirements-sandbox.lock` only after intentional dependency
-  changes and review the complete diff.
+- Regenerate `requirements-sandbox.lock` or `requirements-code-interpreter.lock`
+  only after intentional dependency changes and review the complete diff.
 - Do not weaken SSRF controls, resource limits, output containment, checksum
   validation, or failure cleanup.
 - Add or update focused tests for behavioral changes.

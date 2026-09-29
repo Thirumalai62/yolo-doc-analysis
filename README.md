@@ -447,12 +447,13 @@ before building:
     -Image "legal-notice-detector:r7"
 ```
 
-The first build downloads the OpenSandbox base image and CPU inference
-dependencies and can take several minutes. Later builds normally reuse Docker's
-cache. A successful build ends with:
+The default `slim` build downloads the pinned Python 3.13 base, Node.js 22, and
+CPU inference dependencies and can take several minutes. Later builds normally
+reuse Docker's cache. Use `-Variant full` only for the preserved general-purpose
+OpenSandbox base fallback. A successful default build ends with:
 
 ```text
-Built legal-notice-detector:r7
+Built legal-notice-detector:r7 (slim runtime)
 ```
 
 Do not close Docker Desktop while the build is running.
@@ -670,7 +671,10 @@ and test it again without this mount so the test exercises packaged code.
 Changes that require rebuilding include:
 
 - `Dockerfile.opensandbox`
+- `Dockerfile.opensandbox.full`
+- `requirements-code-interpreter.in` or `requirements-code-interpreter.lock`
 - `requirements-sandbox.in` or `requirements-sandbox.lock`
+- `scripts/code-interpreter-env.sh` or `scripts/code-interpreter.sh`
 - `model-manifest.json`
 - The packaged checkpoint
 - Any final `doc_detector/` change that must be included in the shared image

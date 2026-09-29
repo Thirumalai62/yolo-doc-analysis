@@ -3,6 +3,10 @@
 !doc_detector/**
 !model-manifest.json
 !requirements-sandbox.lock
+!requirements-code-interpreter.lock
+!scripts/
+!scripts/code-interpreter-env.sh
+!scripts/code-interpreter.sh
 !.build/
 !.build/opensandbox/
 !.build/opensandbox/legal_notice_r7.pt

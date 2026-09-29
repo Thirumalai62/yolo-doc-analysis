@@ -8,8 +8,10 @@ checkpoints.
 ## Runtime Contract
 
 - Architecture: `linux/amd64`
-- Base image: `opensandbox/code-interpreter:v1.1.0`
-- Python: `3.13`
+- Base image: pinned `python:3.13.13-slim-bookworm`
+- Python: `3.13.13`
+- Node.js: `22.2.0` with JavaScript and TypeScript kernels
+- Additional kernel: Bash
 - Model: R7, class `legal_notice`
 - Model SHA256: `2fbbad3b81969beefb1ffd428a5bc89dd83beaa9238f262ce67f25a63e237f76`
 - Device: CPU
@@ -29,8 +31,9 @@ under the selected job output directory.
 | `doc_detector/` | Inference-only Python package |
 | `models/legal_notice_r7.pt` | Approved checkpoint tracked by Git LFS |
 | `model-manifest.json` | Model identity, inference settings, and safety limits |
-| `requirements-sandbox.lock` | Complete hash-verified Linux dependency lock |
-| `Dockerfile.opensandbox` | Custom OpenSandbox image |
+| `requirements-code-interpreter.lock` | Complete hash-verified detector and Jupyter dependency lock |
+| `Dockerfile.opensandbox` | Focused Python/Node OpenSandbox-compatible image |
+| `Dockerfile.opensandbox.full` | Preserved general-purpose upstream-base fallback |
 | `scripts/` | Build, smoke-test, and local URL-runner commands |
 | `examples/sandbox_detection_task.py` | Persistent-context OpenSandbox example |
 | `tests/` | Inference runtime tests |
@@ -81,6 +84,16 @@ Linux or WSL:
 
 ```bash
 IMAGE=legal-notice-detector:r7 bash scripts/build-opensandbox-image.sh
+```
+
+The default `slim` variant contains only Python 3.13, Node.js 22, and the
+Python, Bash, JavaScript, and TypeScript kernels. The former general-purpose
+runtime remains available as an explicit rollback build:
+
+```powershell
+.\scripts\build-opensandbox-image.ps1 `
+    -Variant full `
+    -Image "legal-notice-detector:r7-full"
 ```
 
 ## Smoke Test
@@ -178,13 +191,13 @@ and run one real URL from the clean clone before publishing the final image.
 
 ## Release Build
 
-Release builds require an immutable base-image digest approved by the platform
-team:
+The default base already includes an immutable Python image digest. To use a
+new platform-approved digest, pass it explicitly:
 
 ```powershell
 .\scripts\build-opensandbox-image.ps1 `
     -Release `
-    -BaseImage "opensandbox/code-interpreter:v1.1.0@sha256:<approved-digest>" `
+    -BaseImage "python:3.13.13-slim-bookworm@sha256:<approved-digest>" `
     -Image "<private-registry>/legal-notice-detector:r7-v1"
 ```
 

@@ -5,10 +5,25 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 MODEL_VERSION=${MODEL_VERSION:-r7}
 MANIFEST_PATH="${ROOT}/model-manifest.json"
 IMAGE=${IMAGE:-legal-notice-detector:r7}
-BASE_IMAGE=${BASE_IMAGE:-opensandbox/code-interpreter:v1.1.0}
+VARIANT=${VARIANT:-slim}
 PYTHON_VERSION=${PYTHON_VERSION:-3.13}
 RELEASE=${RELEASE:-false}
 STAGING_DIR="${ROOT}/.build/opensandbox"
+
+case "${VARIANT}" in
+    slim)
+        DOCKERFILE="${ROOT}/Dockerfile.opensandbox"
+        BASE_IMAGE=${BASE_IMAGE:-python:3.13.13-slim-bookworm@sha256:355bfa66770995d7e9a0da4b3473b44d0cb451f6b56f5615ad9c39e3c4eca03f}
+        ;;
+    full)
+        DOCKERFILE="${ROOT}/Dockerfile.opensandbox.full"
+        BASE_IMAGE=${BASE_IMAGE:-opensandbox/code-interpreter:v1.1.0}
+        ;;
+    *)
+        echo "VARIANT must be 'slim' or 'full'." >&2
+        exit 1
+        ;;
+esac
 
 model_output=$(python3 - "${MANIFEST_PATH}" "${MODEL_VERSION}" <<'PY'
 import json
@@ -63,10 +78,10 @@ cp "${MODEL_SOURCE}" "${STAGING_DIR}/legal_notice_r7.pt"
 
 docker build \
     --platform linux/amd64 \
-    --file "${ROOT}/Dockerfile.opensandbox" \
+    --file "${DOCKERFILE}" \
     --tag "${IMAGE}" \
     --build-arg "BASE_IMAGE=${BASE_IMAGE}" \
     --build-arg "PYTHON_VERSION=${PYTHON_VERSION}" \
     "${ROOT}"
 
-echo "Built ${IMAGE}"
+echo "Built ${IMAGE} (${VARIANT} runtime)"

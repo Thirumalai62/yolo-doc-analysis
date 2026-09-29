@@ -1,0 +1,8 @@
+# Focused OpenSandbox runtime: detector dependencies plus Python/Node kernels.
+-r requirements-sandbox.in
+
+notebook==7.5.7
+jupyter==1.1.1
+ipykernel==7.3.0
+bash_kernel==0.10.0
+websocket-client==1.9.0

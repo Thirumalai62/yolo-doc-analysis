@@ -1,6 +1,8 @@
 param(
     [string]$Image = "legal-notice-detector:r7",
-    [string]$BaseImage = "opensandbox/code-interpreter:v1.1.0",
+    [ValidateSet("slim", "full")]
+    [string]$Variant = "slim",
+    [string]$BaseImage,
     [string]$PythonVersion = "3.13",
     [string]$ModelVersion = "r7",
     [string]$ModelSource,
@@ -9,6 +11,15 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$DockerfileName = if ($Variant -eq "full") { "Dockerfile.opensandbox.full" } else { "Dockerfile.opensandbox" }
+if ([string]::IsNullOrWhiteSpace($BaseImage)) {
+    $BaseImage = if ($Variant -eq "full") {
+        "opensandbox/code-interpreter:v1.1.0"
+    }
+    else {
+        "python:3.13.13-slim-bookworm@sha256:355bfa66770995d7e9a0da4b3473b44d0cb451f6b56f5615ad9c39e3c4eca03f"
+    }
+}
 $ManifestPath = Join-Path $Root "model-manifest.json"
 if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
     throw "Model manifest does not exist: $ManifestPath"
@@ -56,7 +67,7 @@ try {
     Copy-Item -LiteralPath $ModelSource -Destination (Join-Path $StagingDir "legal_notice_r7.pt")
     & docker build `
         --platform linux/amd64 `
-        --file (Join-Path $Root "Dockerfile.opensandbox") `
+        --file (Join-Path $Root $DockerfileName) `
         --tag $Image `
         --build-arg "BASE_IMAGE=$BaseImage" `
         --build-arg "PYTHON_VERSION=$PythonVersion" `
@@ -64,7 +75,7 @@ try {
     if ($LASTEXITCODE -ne 0) {
         throw "Docker build failed with exit code $LASTEXITCODE."
     }
-    "Built $Image"
+    "Built $Image ($Variant runtime)"
 }
 finally {
     Remove-Item -LiteralPath $StagingDir -Recurse -Force -ErrorAction SilentlyContinue

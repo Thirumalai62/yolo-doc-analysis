@@ -15,7 +15,9 @@ project's training-oriented `main.py`.
 - Maximum detections per page: `300`
 - Aggregate retained-artifact limit: `3221225472` bytes
 - Target platform: `linux/amd64`
-- Python target: `3.13`
+- Python target: `3.13.13`
+- Node.js target: `22.2.0`
+- Jupyter kernels: Python, Bash, JavaScript, and TypeScript
 
 The package supports one of `pdf_url`, `pdf_path`, or `pdf_bytes` for each job.
 URL source PDFs stay in memory. Rendered pages and requested detection artifacts
@@ -27,9 +29,10 @@ are written to the caller's output directory.
 | --- | --- |
 | `doc_detector/` | Independent inference runtime |
 | `model-manifest.json` | Approved model identity, settings, and safety limits |
-| `requirements-sandbox.in` | Pinned direct runtime constraints used to resolve the lock |
-| `requirements-sandbox.lock` | Fully resolved, hashed Linux/Python 3.13 CPU dependency lock |
-| `Dockerfile.opensandbox` | Custom Code Interpreter image |
+| `requirements-code-interpreter.in` | Detector plus focused Jupyter/kernel constraints |
+| `requirements-code-interpreter.lock` | Fully resolved, hashed Linux/Python 3.13 CPU image lock |
+| `Dockerfile.opensandbox` | Focused Python/Node Code Interpreter image |
+| `Dockerfile.opensandbox.full` | Preserved general-purpose upstream-base fallback |
 | `Dockerfile.opensandbox.dockerignore` | Minimal runtime build context |
 | `scripts/build-opensandbox-image.sh` | Verify R7 and build `linux/amd64` image |
 | `scripts/smoke-test-opensandbox-image.sh` | Load and warm R7 inside the image |
@@ -43,19 +46,20 @@ Confirm these values with the platform team before publishing:
 
 1. OpenSandbox server version.
 2. `opensandbox` and `opensandbox-code-interpreter` SDK versions.
-3. Approved Code Interpreter base-image tag and immutable digest.
+3. Approved Python base-image tag and immutable digest.
 4. Private registry location and image pull permissions.
 5. CPU, memory, writable storage, egress, and sandbox TTL limits.
 
 Docker must be running to build or smoke-test the image.
 
-The image installs `requirements-sandbox.lock` in one `--require-hashes` step.
+The image installs `requirements-code-interpreter.lock` in one
+`--require-hashes` step.
 Regenerate it after intentional dependency changes with the approved `uv`
 version and review the resulting diff:
 
 ```powershell
-uv pip compile requirements-sandbox.in `
-  --output-file requirements-sandbox.lock `
+uv pip compile requirements-code-interpreter.in `
+  --output-file requirements-code-interpreter.lock `
   --python-version 3.13 `
   --python-platform x86_64-manylinux_2_28 `
   --torch-backend cpu `
@@ -72,7 +76,6 @@ Run from Git Bash, WSL, or a Linux build worker:
 
 ```bash
 IMAGE=registry.example.com/legal-notice-detector:r7-v1 \
-BASE_IMAGE=opensandbox/code-interpreter:v1.1.0 \
 bash scripts/build-opensandbox-image.sh
 ```
 
@@ -80,8 +83,7 @@ On Windows PowerShell with Docker Desktop running:
 
 ```powershell
 .\scripts\build-opensandbox-image.ps1 `
-  -Image "registry.example.com/legal-notice-detector:r7-v1" `
-  -BaseImage "opensandbox/code-interpreter:v1.1.0"
+  -Image "registry.example.com/legal-notice-detector:r7-v1"
 ```
 
 The build script:
@@ -101,12 +103,12 @@ IMAGE=registry.example.com/legal-notice-detector:r7-v1 \
 bash scripts/build-opensandbox-image.sh
 ```
 
-For production, replace the base tag with the immutable digest approved for the
-installed OpenSandbox version:
+The default focused base is already digest-pinned. To use another approved
+Python base digest:
 
 ```bash
 RELEASE=true \
-BASE_IMAGE='opensandbox/code-interpreter:v1.1.0@sha256:<approved-digest>' \
+BASE_IMAGE='python:3.13.13-slim-bookworm@sha256:<approved-digest>' \
 IMAGE=registry.example.com/legal-notice-detector:r7-v1 \
 bash scripts/build-opensandbox-image.sh
 ```
@@ -116,7 +118,7 @@ PowerShell release build:
 ```powershell
 .\scripts\build-opensandbox-image.ps1 `
   -Release `
-  -BaseImage "opensandbox/code-interpreter:v1.1.0@sha256:<approved-digest>" `
+  -BaseImage "python:3.13.13-slim-bookworm@sha256:<approved-digest>" `
   -Image "registry.example.com/legal-notice-detector:r7-v1"
 ```
 
@@ -135,9 +137,11 @@ Windows PowerShell:
 ```
 
 The image smoke test overrides the entrypoint, selects the configured Python,
-validates R7, and runs a synthetic warm-up prediction. It is not a substitute
-for the release-gate OpenSandbox test, which must start the official entrypoint,
-create a Code Interpreter context, run two jobs, and retrieve JSON and PNG files.
+validates R7, and runs a synthetic warm-up prediction. Release validation must
+also start the packaged entrypoint and exercise the persistent Python,
+JavaScript, and TypeScript kernels through the Jupyter API. This is not a
+substitute for the final platform test, which must create a Code Interpreter
+context, run two jobs, and retrieve JSON and PNG files.
 
 ## Publish
 
